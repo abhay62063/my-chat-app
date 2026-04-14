@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 import EmojiPicker from 'emoji-picker-react';
 
-const socket = io.connect("http://localhost:5000");
 const socket = io.connect("https://my-chat-app-t5b5.onrender.com");
 
 function App() {
