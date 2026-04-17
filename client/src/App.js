@@ -7,7 +7,7 @@ import { ChatArea } from './components/ChatArea';
 import io from "socket.io-client";
 
 // Socket connection initialization
-const socket = io("http://localhost:5000", {
+const socket = io("https://my-chat-app-t5b5.onrender.com", {
   transports: ["websocket"],
   autoConnect: true,
 });
