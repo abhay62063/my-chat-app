@@ -110,6 +110,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [menuOpen, setMenuOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
+  const isInitialLoad = useRef(true); // Track first history load vs live messages
   const isDark = theme === 'dark';
 
   // Close dropdown when clicking outside
@@ -123,9 +124,13 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom (WhatsApp-style)
+  // On initial history load → instant jump; on new messages → smooth scroll
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messageList.length === 0) return;
+    const behavior = isInitialLoad.current ? 'instant' : 'smooth';
+    messagesEndRef.current?.scrollIntoView({ behavior });
+    isInitialLoad.current = false;
   }, [messageList]);
 
   // ── Send Message ─────────────────────────────────────────────────────────────
@@ -239,14 +244,16 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   // ── Join Screen ───────────────────────────────────────────────────────────
   if (!showChat) {
     return (
-      <>
-        {/* ── Fixed theme toggle — top-right of login screen ── */}
+      // Relative wrapper so the toggle button is contained and never overlaps the form
+      <div className="relative flex-1 flex flex-col">
+
+        {/* ── Theme toggle — top-right, absolute so it never pushes content down ── */}
         <motion.button
           onClick={toggleTheme}
           title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.95 }}
-          className="fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 border"
+          className="absolute top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-full text-xs font-bold transition-all duration-300 border login-theme-btn"
           style={isDark
             ? {
                 background: 'rgba(255,255,255,0.07)',
@@ -267,18 +274,21 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             ? <Sun className="w-4 h-4 text-yellow-400" />
             : <Moon className="w-4 h-4 text-blue-500" />
           }
-          {isDark ? 'Light Mode' : 'Dark Mode'}
+          {/* Hide the label text on very small screens to prevent overlap */}
+          <span className="login-btn-label">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
         </motion.button>
 
-        {/* ── Login card ── */}
-        <div className="flex-1 flex items-center justify-center p-6">
+        {/* ── Login card — padded top so it clears the toggle button on mobile ── */}
+        <div className="flex-1 flex items-center justify-center p-4 pt-16 sm:pt-6 login-card-wrapper">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className={`w-full max-w-md p-10 rounded-[2rem] ${t.card(isDark)}`}
+            className={`w-full max-w-md rounded-[2rem] login-card ${t.card(isDark)}`}
+            style={{ padding: 'clamp(1.5rem, 5vw, 2.5rem)' }}
           >
-            <div className="text-center mb-8">
-              <h2 className={`text-4xl font-black mb-2 tracking-tight font-['Outfit'] ${t.title(isDark)}`}>
+            <div className="text-center mb-6">
+              <h2 className={`font-black mb-2 tracking-tight font-['Outfit'] login-title ${t.title(isDark)}`}
+                  style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)' }}>
                 Private Space<span className="text-cyan-400">.</span>
               </h2>
               <p className={`text-xs font-bold uppercase tracking-[0.2em] ${t.label(isDark)}`}>
@@ -286,14 +296,14 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {/* Name */}
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400" />
                 <input
                   type="text"
                   placeholder="Your Name..."
-                  className={`w-full rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
+                  className={`w-full rounded-xl py-3 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
                   onChange={(e) => setUsername(e.target.value)}
                 />
               </div>
@@ -304,7 +314,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 <input
                   type="text"
                   placeholder="Room ID..."
-                  className={`w-full rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
+                  className={`w-full rounded-xl py-3 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
                   onChange={(e) => setRoom(e.target.value)}
                 />
               </div>
@@ -315,7 +325,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 <input
                   type="password"
                   placeholder="Room Password (Encryption Key)..."
-                  className={`w-full rounded-xl py-3.5 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
+                  className={`w-full rounded-xl py-3 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
@@ -324,22 +334,23 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 whileHover={{ scale: 1.02, boxShadow: "0 0 30px rgba(6,182,212,0.4)" }}
                 whileTap={{ scale: 0.98 }}
                 onClick={joinRoom}
-                className="w-full py-4 mt-2 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl transition-all"
+                className="w-full py-3.5 mt-1 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl transition-all"
               >
                 Enter Private Room
-            </motion.button>
-          </div>
-        </motion.div>
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
       </div>
-    </>
     );
   }
 
   // ── Chat Interface ─────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col h-full">
+    // h-full + flex-col: fills the available viewport; min-h-0 prevents overflow pushing input off-screen
+    <div className="flex-1 flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className={`px-4 py-3 flex justify-between items-center ${t.header(isDark)}`}>
+      <div className={`flex-shrink-0 px-4 py-3 flex justify-between items-center ${t.header(isDark)}`}>
         <div className={`flex items-center gap-2 text-[10px] font-bold tracking-widest ${t.author(isDark)}`}>
           <Lock className="w-3 h-3" />
           <span>E2E ENCRYPTED</span>
@@ -408,8 +419,8 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Messages — flex-1 min-h-0 is the key: lets this div shrink so the input bar is never pushed off screen */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 chat-messages">
         {messageList.map((msg, index) => (
           <MessageItem 
             key={msg.msgId || index}
@@ -441,8 +452,8 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className={`p-4 ${t.inputArea(isDark)}`}>
+      {/* Input — sticky bottom-0 keeps it anchored above the mobile keyboard */}
+      <div className={`flex-shrink-0 sticky bottom-0 z-10 p-3 chat-input-area ${t.inputArea(isDark)}`}>
         <div className={`flex items-center gap-2 rounded-full p-1.5 border transition-all shadow-inner ${isDark ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50' : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'}`}>
           <input
             type="text"

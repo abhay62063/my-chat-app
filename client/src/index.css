@@ -1,3 +1,67 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─── Global resets for mobile ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  /* Prevent iOS bounce scroll on the page body */
+  overscroll-behavior: none;
+}
+
+/* ─── Mobile: Login screen ───────────────────────────────────────────────────
+   On screens ≤480 px the theme toggle label ("Light Mode" / "Dark Mode") is
+   hidden so the button can't overlap the card title on very narrow phones.    */
+@media (max-width: 480px) {
+  .login-btn-label {
+    display: none;
+  }
+
+  /* Give the login card a little more breathing room */
+  .login-card-wrapper {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ─── Mobile: Chat window ────────────────────────────────────────────────────
+   Tighten padding so messages use the full screen width on phones.            */
+@media (max-width: 768px) {
+  /* Message list padding: less horizontal padding on mobile */
+  .chat-messages {
+    padding: 0.75rem 0.625rem;
+  }
+
+  /* Message bubbles: let them use up to 88 % of screen width */
+  .chat-messages > div > div {
+    max-width: 88%;
+  }
+
+  /* Input bar: tighter padding */
+  .chat-input-area {
+    padding: 0.5rem 0.625rem;
+  }
+
+  /* Shrink send-button icon slightly */
+  .chat-input-area button svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  /* Slightly smaller message text */
+  .chat-messages p {
+    font-size: 0.8125rem;
+  }
+}
+
+/* ─── iOS Safari: prevent the viewport from shrinking when keyboard opens ────
+   Using env(safe-area-inset-*) ensures content is never hidden behind notches. */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .chat-input-area {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}

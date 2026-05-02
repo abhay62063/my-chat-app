@@ -69,8 +69,8 @@ export default function App() {
 
   return (
     <div
-      className="relative h-screen overflow-hidden font-['Inter',sans-serif]"
-      style={{ color: isDark ? 'white' : '#1a1a2e' }}
+      className="relative overflow-hidden font-['Inter',sans-serif]"
+      style={{ height: '100dvh', color: isDark ? 'white' : '#1a1a2e' }}
     >
       {/* ── Backgrounds ── */}
       {isDark ? (
