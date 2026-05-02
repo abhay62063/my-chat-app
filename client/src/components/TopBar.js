@@ -1,37 +1,49 @@
 import { Menu, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export function TopBar({ onMenuClick, room }) {
-  // Room ID ab dynamic props se aayegi
+export function TopBar({ onMenuClick, room, theme }) {
+  const isDark = theme === 'dark';
   const currentRoomId = room || "Join a Room";
 
   return (
-    <div className="sticky top-0 z-30 bg-gradient-to-br from-white/10 via-white/5 to-white/10 backdrop-blur-xl border-b border-white/20">
+    <div
+      className="sticky top-0 z-30 border-b"
+      style={isDark
+        ? { background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', borderColor: 'rgba(255,255,255,0.15)' }
+        : { background: '#ffffff', borderColor: '#e2e8f0', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }
+      }
+    >
       <div className="flex items-center justify-between px-4 py-3">
-        {/* Hamburger Menu - Mobile Toggle */}
+        {/* Hamburger */}
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={onMenuClick}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors active:bg-white/20"
+          className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
         >
-          <Menu className="w-6 h-6 text-cyan-400" strokeWidth={2} />
+          <Menu className={`w-6 h-6 ${isDark ? 'text-cyan-400' : 'text-blue-500'}`} strokeWidth={2} />
         </motion.button>
 
-        {/* Room ID - Center */}
+        {/* Room ID */}
         <div className="flex-1 flex justify-center px-2">
-          <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/30 rounded-lg px-3 py-1.5">
-            <code className="text-xs font-['Outfit',sans-serif] font-semibold text-cyan-400">
+          <div
+            className="rounded-lg px-3 py-1.5"
+            style={isDark
+              ? { background: 'linear-gradient(90deg,rgba(34,211,238,0.15),rgba(59,130,246,0.15))', border: '1px solid rgba(34,211,238,0.25)' }
+              : { background: '#eff6ff', border: '1px solid #bfdbfe' }
+            }
+          >
+            <code className={`text-xs font-semibold font-['Outfit',sans-serif] ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
               {currentRoomId}
             </code>
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Options */}
         <motion.button
           whileTap={{ scale: 0.95 }}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors active:bg-white/20"
+          className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100'}`}
         >
-          <MoreVertical className="w-6 h-6 text-gray-400" strokeWidth={2} />
+          <MoreVertical className={`w-6 h-6 ${isDark ? 'text-gray-400' : 'text-slate-400'}`} strokeWidth={2} />
         </motion.button>
       </div>
     </div>
