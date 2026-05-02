@@ -287,10 +287,16 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             style={{ padding: 'clamp(1.5rem, 5vw, 2.5rem)' }}
           >
             <div className="text-center mb-6">
-              <h2 className={`font-black mb-2 tracking-tight font-['Outfit'] login-title ${t.title(isDark)}`}
-                  style={{ fontSize: 'clamp(1.75rem, 6vw, 2.25rem)' }}>
-                Private Space<span className="text-cyan-400">.</span>
-              </h2>
+              {/* GhostLink neon wordmark — Orbitron font with ghost glow */}
+              <h1 className="mb-3" style={{ lineHeight: 1.1 }}>
+                <span
+                  className="ghostlink-logo"
+                  style={{ fontSize: 'clamp(2rem, 7vw, 2.75rem)' }}
+                >
+                  GhostLink
+                </span>
+                <span className="ghostlink-dot" style={{ fontSize: 'clamp(2rem, 7vw, 2.75rem)' }}>.</span>
+              </h1>
               <p className={`text-xs font-bold uppercase tracking-[0.2em] ${t.label(isDark)}`}>
                 End-to-End Encrypted
               </p>
@@ -350,16 +356,31 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     // h-full + flex-col: fills the available viewport; min-h-0 prevents overflow pushing input off-screen
     <div className="flex-1 flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className={`flex-shrink-0 px-4 py-3 flex justify-between items-center ${t.header(isDark)}`}>
-        <div className={`flex items-center gap-2 text-[10px] font-bold tracking-widest ${t.author(isDark)}`}>
-          <Lock className="w-3 h-3" />
-          <span>E2E ENCRYPTED</span>
+      <div className={`flex-shrink-0 px-4 py-2 flex justify-between items-center ${t.header(isDark)}`}>
+        {/* GhostLink brand in header */}
+        <div className="flex items-center gap-2">
+          <span
+            className="ghostlink-logo"
+            style={{ fontSize: 'clamp(0.85rem, 3vw, 1rem)' }}
+          >
+            GhostLink
+          </span>
+          <span
+            className={`hidden sm:flex items-center gap-1 text-[9px] font-bold tracking-widest px-2 py-0.5 rounded-full border ${
+              isDark
+                ? 'border-cyan-500/30 text-cyan-400/70 bg-cyan-500/10'
+                : 'border-blue-300/50 text-blue-500/70 bg-blue-50'
+            }`}
+          >
+            <Lock className="w-2.5 h-2.5" />
+            E2E
+          </span>
         </div>
-        {/* 3-dot Options Menu */}
+        {/* 3-dot Options Menu — chat-header-btn ensures 44×44 px touch target on mobile */}
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(o => !o)}
-            className={`p-2 rounded-lg transition-all ${
+            className={`chat-header-btn p-2 rounded-xl transition-all ${
               isDark
                 ? 'hover:bg-white/10 text-gray-400 hover:text-cyan-400'
                 : 'hover:bg-slate-100 text-slate-400 hover:text-blue-500'

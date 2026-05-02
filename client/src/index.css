@@ -2,66 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Global resets for mobile ──────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   GhostLink — Global Stylesheet
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Base resets ─────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
 html, body, #root {
   height: 100%;
-  /* Prevent iOS bounce scroll on the page body */
-  overscroll-behavior: none;
+  overscroll-behavior: none; /* Kill iOS rubber-band bounce on root */
 }
 
-/* ─── Mobile: Login screen ───────────────────────────────────────────────────
-   On screens ≤480 px the theme toggle label ("Light Mode" / "Dark Mode") is
-   hidden so the button can't overlap the card title on very narrow phones.    */
+/* ── GhostLink neon wordmark ─────────────────────────────────────────────── */
+/*
+  Usage: <span class="ghostlink-logo">GhostLink</span>
+  Renders with Orbitron, a cyan→violet gradient fill, and a multi-layer
+  drop-shadow that gives a ghostly neon glow effect.
+*/
+.ghostlink-logo {
+  font-family: 'Orbitron', 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  /* Gradient text */
+  background: linear-gradient(100deg, #22d3ee 0%, #818cf8 55%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  /* Layered neon glow */
+  filter:
+    drop-shadow(0 0 8px  rgba(34, 211, 238, 0.7))
+    drop-shadow(0 0 22px rgba(129, 140, 248, 0.45))
+    drop-shadow(0 0 42px rgba(192, 132, 252, 0.2));
+  display: inline-block;
+}
+
+/* Light-mode variant: vivid but no harsh glow */
+[data-theme='light'] .ghostlink-logo {
+  background: linear-gradient(100deg, #0891b2 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 6px rgba(8, 145, 178, 0.4));
+}
+
+/* Ghost-pulse: the logo dot (.) breathes like a ghost signal */
+@keyframes ghost-pulse {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(34, 211, 238, 1), 0 0 30px rgba(34, 211, 238, 0.6);
+  }
+  50% {
+    opacity: 0.55;
+    text-shadow: 0 0 3px rgba(34, 211, 238, 0.4);
+  }
+}
+
+.ghostlink-dot {
+  display: inline-block;
+  /* Override gradient so the dot is solid cyan */
+  background: none;
+  -webkit-text-fill-color: #22d3ee;
+  color: #22d3ee;
+  animation: ghost-pulse 2.4s ease-in-out infinite;
+}
+
+/* ── Login screen ────────────────────────────────────────────────────────── */
+/* ≤480 px: hide the toggle button's text label so the icon-only button      */
+/* sits safely in the corner without overlapping the form card.               */
 @media (max-width: 480px) {
   .login-btn-label {
     display: none;
   }
-
-  /* Give the login card a little more breathing room */
   .login-card-wrapper {
     padding-left: 1rem;
     padding-right: 1rem;
   }
 }
 
-/* ─── Mobile: Chat window ────────────────────────────────────────────────────
-   Tighten padding so messages use the full screen width on phones.            */
+/* ── Chat window — mobile (≤768 px) ─────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Message list padding: less horizontal padding on mobile */
+
+  /* Tighter message list padding on small screens */
   .chat-messages {
     padding: 0.75rem 0.625rem;
   }
 
-  /* Message bubbles: let them use up to 88 % of screen width */
+  /* Bubbles expand to 88 % of screen width */
   .chat-messages > div > div {
     max-width: 88%;
   }
 
-  /* Input bar: tighter padding */
+  /* Compact input bar */
   .chat-input-area {
     padding: 0.5rem 0.625rem;
   }
 
-  /* Shrink send-button icon slightly */
-  .chat-input-area button svg {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-
-  /* Slightly smaller message text */
+  /* Slightly smaller message body text */
   .chat-messages p {
     font-size: 0.8125rem;
   }
+
+  /* ── Touch targets ───────────────────────────────────────────────────────
+     WCAG 2.5.5 / Apple HIG: every interactive element must be ≥ 44 × 44 px */
+  .chat-input-area button,
+  .chat-header-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
-/* ─── iOS Safari: prevent the viewport from shrinking when keyboard opens ────
-   Using env(safe-area-inset-*) ensures content is never hidden behind notches. */
+/* ── iOS Safe Area (notch / home bar) ───────────────────────────────────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .chat-input-area {
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(0.625rem + env(safe-area-inset-bottom));
   }
 }

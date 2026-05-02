@@ -16,7 +16,26 @@ export function Sidebar({ isOpen, onClose, isMobile, room, username, members, th
     >
       {/* Header */}
       <div className="p-4 sm:p-6 border-b" style={{ borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0' }}>
-        <div className="flex items-start justify-between mb-4">
+        {/* GhostLink logo at top of sidebar */}
+        <div className="mb-4 flex items-center justify-between">
+          <span
+            className="ghostlink-logo"
+            style={{ fontSize: '1.1rem' }}
+          >
+            GhostLink
+          </span>
+
+          {isMobile && (
+            <button
+              onClick={onClose}
+              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
+            >
+              <X className={`w-5 h-5 ${isDark ? 'text-gray-400' : 'text-slate-400'}`} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <Shield className="w-4 h-4 text-cyan-500" strokeWidth={2} />
@@ -36,16 +55,8 @@ export function Sidebar({ isOpen, onClose, isMobile, room, username, members, th
               </code>
             </div>
           </div>
-
-          {isMobile && (
-            <button
-              onClick={onClose}
-              className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-100'}`}
-            >
-              <X className={`w-5 h-5 ${isDark ? 'text-gray-400' : 'text-slate-400'}`} />
-            </button>
-          )}
         </div>
+
 
         {/* Online Count */}
         <div className="flex items-center gap-2 mt-4">
