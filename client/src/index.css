@@ -86,6 +86,12 @@ body {
   }
 }
 
+/* Shimmer: sweeps the neon progress bar left→right while sending media */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .ghostlink-dot {
   display: inline-block;
   /* Override gradient so the dot is solid cyan */

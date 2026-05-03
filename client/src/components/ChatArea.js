@@ -98,9 +98,6 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
       ) : (
         <img
           src={
-            // Ensure the Base64 string always has a valid data: URI prefix.
-            // If imageCompression returns a Blob URL or a raw base64 string without
-            // the prefix, the img tag will show broken. Always normalise here.
             msg.mediaBase64 && msg.mediaBase64.startsWith('data:')
               ? msg.mediaBase64
               : `data:image/jpeg;base64,${msg.mediaBase64}`
@@ -108,8 +105,18 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
           alt="Shared image"
           style={{ display: 'block', width: '100%', maxHeight: '260px', objectFit: 'cover' }}
           onError={(e) => {
-            // Fallback: if the src is still broken, hide the broken icon
-            e.currentTarget.style.opacity = '0.3';
+            // Replace the broken img with a styled placeholder frame
+            const el = e.currentTarget;
+            el.style.display = 'none';
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = [
+              'width:100%', 'height:160px', 'display:flex',
+              'flex-direction:column', 'align-items:center', 'justify-content:center',
+              'gap:8px', 'background:rgba(0,0,0,0.4)', 'color:rgba(255,255,255,0.45)',
+              'font-size:0.72rem', 'letter-spacing:0.05em',
+            ].join(';');
+            placeholder.innerHTML = '🖼&nbsp;&nbsp;Image unavailable';
+            el.parentNode.insertBefore(placeholder, el);
           }}
         />
       )}
@@ -195,26 +202,67 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
     return () => observer.disconnect();
   }, [isOwn, msg, username, socket, room]);
 
-  // ── Notification (system) messages render as a centered pill ─────────────
+  // ── Notification (system) messages render as a premium centered pill ─────
   if (msg.type === 'notification') {
+    // Detect join vs leave to apply correct tint
+    const isJoin = msg.message && (
+      msg.message.includes('joined') ||
+      msg.message.includes('materialized')
+    );
+    const isLeave = msg.message && (
+      msg.message.includes('left') ||
+      msg.message.includes('vanished')
+    );
+
+    // Rewrite raw server text into cinematic language
+    let displayText = msg.message;
+    if (isJoin) {
+      displayText = msg.message.replace(
+        /(.*) joined the room/,
+        (_, name) => `✦ ${name} materialized in the room`
+      );
+    } else if (isLeave) {
+      displayText = msg.message.replace(
+        /(.*) left the room/,
+        (_, name) => `✦ ${name} vanished from the room`
+      );
+    }
+
     return (
-      <div className="flex justify-center my-1">
+      <div className="flex justify-center my-2">
         <span
           style={{
-            fontSize: '0.75rem', // 12px
-            fontWeight: 500,
-            color: 'rgba(255, 255, 255, 0.9)',
-            background: 'rgba(30, 41, 59, 0.65)', // Dark glassmorphism
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            padding: '4px 16px',
+            fontSize: '0.7rem',
+            fontWeight: 400,
+            letterSpacing: '0.04em',
+            color: isJoin
+              ? 'rgba(34, 211, 238, 0.95)'   // cyan for join
+              : isLeave
+                ? 'rgba(252, 165, 165, 0.9)' // soft red for leave
+                : 'rgba(255, 255, 255, 0.75)',
+            background: isJoin
+              ? 'rgba(34, 211, 238, 0.07)'
+              : isLeave
+                ? 'rgba(239, 68, 68, 0.08)'
+                : 'rgba(30, 41, 59, 0.55)',
+            border: isJoin
+              ? '1px solid rgba(34, 211, 238, 0.2)'
+              : isLeave
+                ? '1px solid rgba(239, 68, 68, 0.2)'
+                : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: isJoin
+              ? '0 0 12px rgba(34,211,238,0.12)'
+              : isLeave
+                ? '0 0 12px rgba(239,68,68,0.1)'
+                : 'none',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            padding: '4px 14px',
             borderRadius: '999px',
             userSelect: 'none',
           }}
         >
-          {msg.message}
+          {displayText}
         </span>
       </div>
     );
@@ -790,22 +838,26 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         )}
       </AnimatePresence>
 
-      {/* ── Full-screen Sending Overlay ── */}
+      {/* ── Slim neon progress bar (replaces full-screen blur overlay) ── */}
       <AnimatePresence>
         {isSending && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[20000] flex flex-col items-center justify-center backdrop-blur-md bg-black/40"
-          >
-            <div className="bg-white/10 p-6 rounded-2xl flex flex-col items-center gap-4 border border-white/20 shadow-2xl backdrop-blur-xl">
-              <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
-              <p className="text-white font-semibold tracking-wide text-sm">
-                Sending media... Please wait.
-              </p>
-            </div>
-          </motion.div>
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              height: '3px',
+              background: 'linear-gradient(90deg, #06b6d4, #3b82f6, #06b6d4)',
+              backgroundSize: '200% 100%',
+              animation: 'shimmer 1.4s linear infinite',
+              borderRadius: '0 0 2px 2px',
+            }}
+          />
         )}
       </AnimatePresence>
 
@@ -859,21 +911,33 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         />
 
         <div className={`flex items-center gap-2 rounded-full p-1.5 border transition-all shadow-inner ${isDark ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50' : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'}`}>
-          {/* Attachment button — sets isPickingFile guard before opening picker */}
+          {/* Attachment button — pulsing 'Sending…' label when active */}
           <button
             onClick={() => {
               if (isPickingFile) isPickingFile.current = true;
               fileInputRef.current?.click();
             }}
             disabled={isSending}
-            title="Share image or video"
-            className={`p-2 rounded-full transition-all flex-shrink-0 disabled:opacity-50 ${
+            title={isSending ? 'Sending…' : 'Share image or video'}
+            className={`p-2 rounded-full transition-all flex-shrink-0 disabled:opacity-60 flex items-center gap-1.5 ${
               isDark
                 ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/10'
                 : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100'
             }`}
           >
-            {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+            {isSending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                <span
+                  className="text-[10px] font-semibold tracking-wide"
+                  style={{ color: '#22d3ee', animation: 'pulse 1.2s ease-in-out infinite' }}
+                >
+                  Sending…
+                </span>
+              </>
+            ) : (
+              <Paperclip className="w-4 h-4" />
+            )}
           </button>
 
           <input
