@@ -34,7 +34,8 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  maxHttpBufferSize: 1e8 // Set to ~100MB to allow large file transfers
 });
 
 // Room users ko track karne ke liye object

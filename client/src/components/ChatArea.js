@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2 } from 'lucide-react';
 import CryptoJS from 'crypto-js';
+import imageCompression from 'browser-image-compression';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const encrypt = (text, key) => CryptoJS.AES.encrypt(text, key).toString();
@@ -244,6 +245,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [isTyping, setIsTyping] = useState(false);
   const [whoIsTyping, setWhoIsTyping] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
@@ -302,30 +304,51 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   };
 
   // ── Send Multimedia (image / video via Base64) ───────────────────────────
-  const sendMultimedia = (file) => {
+  const sendMultimedia = async (file) => {
     if (!file) return;
-    const isVideo = file.type.startsWith('video/');
-    const mediaType = isVideo ? 'video' : 'image';
-    const reader = new FileReader();
+    setIsSending(true);
 
-    reader.onload = () => {
-      const base64 = reader.result;  // data:image/...;base64,...
-      const msgId = Date.now().toString() + Math.random().toString(36).substring(2);
-      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      let processedFile = file;
+      const isVideo = file.type.startsWith('video/');
+      const mediaType = isVideo ? 'video' : 'image';
 
-      const payload = { msgId, room, author: username, mediaBase64: base64, mediaType, time };
+      // Compress image if larger than 2MB
+      if (!isVideo && file.size > 2 * 1024 * 1024) {
+        const options = {
+          maxSizeMB: 2,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        };
+        processedFile = await imageCompression(file, options);
+      }
 
-      // Emit to server (server saves placeholder, relays Base64 to peers)
-      socket.emit('send_multimedia', payload);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result;  // data:image/...;base64,...
+        const msgId = Date.now().toString() + Math.random().toString(36).substring(2);
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Show immediately in the sender's own chat
-      setMessageList((list) => [...list, { ...payload, type: mediaType }]);
-    };
+        const payload = { msgId, room, author: username, mediaBase64: base64, mediaType, time };
 
-    reader.readAsDataURL(file);
-    // Reset file-picker guard and input value so same file can be re-picked
-    if (isPickingFile) isPickingFile.current = false;
-    if (fileInputRef.current) fileInputRef.current.value = '';
+        // Emit to server (server saves placeholder, relays Base64 to peers)
+        socket.emit('send_multimedia', payload);
+
+        // Show immediately in the sender's own chat
+        setMessageList((list) => [...list, { ...payload, type: mediaType }]);
+        setIsSending(false);
+      };
+
+      reader.onerror = () => setIsSending(false);
+      reader.readAsDataURL(processedFile);
+    } catch (error) {
+      console.error("Error processing file:", error);
+      setIsSending(false);
+    } finally {
+      // Reset file-picker guard and input value so same file can be re-picked
+      if (isPickingFile) isPickingFile.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleTyping = (e) => {
@@ -736,27 +759,29 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               if (isPickingFile) isPickingFile.current = true;
               fileInputRef.current?.click();
             }}
+            disabled={isSending}
             title="Share image or video"
-            className={`p-2 rounded-full transition-all flex-shrink-0 ${
+            className={`p-2 rounded-full transition-all flex-shrink-0 disabled:opacity-50 ${
               isDark
                 ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/10'
                 : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100'
             }`}
           >
-            <Paperclip className="w-4 h-4" />
+            {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
           </button>
 
           <input
             type="text"
             value={currentMessage}
             onChange={handleTyping}
-            onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-            className={`flex-1 bg-transparent px-2 outline-none text-sm ${isDark ? 'text-white placeholder:text-gray-500' : 'text-slate-800 placeholder:text-slate-400'}`}
-            placeholder="Type your message..."
+            onKeyPress={(e) => !isSending && e.key === "Enter" && sendMessage()}
+            disabled={isSending}
+            className={`flex-1 bg-transparent px-2 outline-none text-sm ${isDark ? 'text-white placeholder:text-gray-500' : 'text-slate-800 placeholder:text-slate-400'} disabled:opacity-50`}
+            placeholder={isSending ? "Sending media..." : "Type your message..."}
           />
           <button
             onClick={sendMessage}
-            disabled={!currentMessage.trim()}
+            disabled={!currentMessage.trim() || isSending}
             className={`p-2.5 rounded-full text-white shadow-lg transition-all disabled:opacity-50 ${t.sendBtn(isDark)}`}
           >
             <Send className="w-5 h-5" />
