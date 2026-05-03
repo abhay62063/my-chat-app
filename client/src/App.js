@@ -15,6 +15,8 @@ console.log('🔌 Connecting to server:', SERVER_URL);
 const socket = io(SERVER_URL, {
   transports: ["websocket", "polling"],
   autoConnect: true,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
 });
 
 export default function App() {
@@ -31,8 +33,6 @@ export default function App() {
   // The file picker backgrounds the page (visibilityState → 'hidden') on
   // Android and iOS, so we must NOT disconnect the socket during that window.
   const isPickingFile = useRef(false);
-  // Timer ref for the 10-minute grace period disconnect
-  const gracePeriodTimer = useRef(null);
 
   // ── Theme Toggle ────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'light');
@@ -46,7 +46,14 @@ export default function App() {
 
   // ── Socket Listeners ────────────────────────────────────────────────────────
   useEffect(() => {
-    socket.on("connect", () => console.log("Connected! ID:", socket.id));
+    socket.on("connect", () => {
+      console.log("Connected! ID:", socket.id);
+      // Automatically re-join room on auto-reconnection
+      if (showChat && room && username) {
+        socket.emit("join_room", { room, username });
+        setSessionEnded(true);
+      }
+    });
     socket.on("update_members", (data) => setMembers(data));
     socket.on("connect_error", (err) => console.log("Connection Error:", err.message));
     return () => {
@@ -54,7 +61,7 @@ export default function App() {
       socket.off("update_members");
       socket.off("connect_error");
     };
-  }, []);
+  }, [showChat, room, username]);
 
   // ── Mobile Detection ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -64,62 +71,9 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // ── Page Visibility API — 10-Minute Grace Period ────────────────────────────
-  // When the user hides the app (tab switch, screen lock, etc.) we start a
-  // 10-minute countdown instead of cutting the connection immediately.
-  // • If they return before 10 min  → cancel the timer, do nothing.
-  // • If 10 min elapse              → disconnect; server notifies peers.
-  // • File-picker hides the page on Android/iOS — skip the timer entirely.
-  // • Manual "Leave Room" uses leaveRoom() which disconnects without a timer.
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        // ── File-picker safety: ignore visibility events during file selection ──
-        if (isPickingFile.current) return;
-
-        // ── Start 10-minute grace period ──────────────────────────────────────
-        gracePeriodTimer.current = setTimeout(() => {
-          gracePeriodTimer.current = null;
-          if (socket.connected) {
-            socket.disconnect();
-          }
-        }, 10 * 60 * 1000); // 10 minutes
-
-      } else {
-        // ── User returned — cancel the pending disconnect ──────────────────────
-        if (gracePeriodTimer.current) {
-          clearTimeout(gracePeriodTimer.current);
-          gracePeriodTimer.current = null;
-          // Nothing else to do — socket is still connected
-          return;
-        }
-
-        // Grace period already elapsed and socket was disconnected — reconnect
-        if (!socket.connected) {
-          socket.connect();
-          if (showChat && room && username) {
-            // Small delay to let the socket handshake complete
-            setTimeout(() => {
-              socket.emit('join_room', { room, username });
-            }, 400);
-            // Inform the user the session was paused
-            setSessionEnded(true);
-          }
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      // Clean up any pending timer when the effect re-runs or unmounts
-      if (gracePeriodTimer.current) {
-        clearTimeout(gracePeriodTimer.current);
-        gracePeriodTimer.current = null;
-      }
-    };
-  // showChat/room/username must be in deps so the closure captures fresh values
-  }, [showChat, room, username]);
+  // Client-side Page Visibility grace period has been removed.
+  // Grace period and background timeouts are now handled natively by the backend
+  // and Socket.io auto-reconnection.
 
   // ── Visual Viewport Height (keyboard-aware) ──────────────────────────────
   // Writes --vvh to <html> so the app shrinks exactly when the soft keyboard
@@ -157,18 +111,16 @@ export default function App() {
   // so the message_history listener is guaranteed to be registered first.
   const joinRoom = () => {
     if (username !== "" && room !== "" && password !== "") {
+      if (!socket.connected) socket.connect();
       setShowChat(true); // ChatArea's useEffect will emit join_room after mounting
     }
   };
 
   // ── Manual Leave Room ───────────────────────────────────────────────────────
-  // Called by the Leave Room button. Cancels any pending grace-period timer
-  // and disconnects immediately — no 10-minute wait.
+  // Called by the Leave Room button.
+  // Sends the explicit manual_leave event to immediately clear backend timers and notify peers.
   const leaveRoom = () => {
-    if (gracePeriodTimer.current) {
-      clearTimeout(gracePeriodTimer.current);
-      gracePeriodTimer.current = null;
-    }
+    socket.emit("manual_leave", { room, username });
     if (socket.connected) socket.disconnect();
     setShowChat(false);
     setUsername("");

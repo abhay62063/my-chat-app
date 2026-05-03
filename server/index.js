@@ -40,12 +40,10 @@ const io = new Server(server, {
 // Room users ko track karne ke liye object
 const roomUsers = {};
 
-// ── Rapid-reconnect grace window ───────────────────────────────────────────────
-// If a user disconnects and re-joins the SAME room within 5 seconds,
-// suppress both the 'left' and the 'joined' notifications to avoid spam
-// caused by fast tab-switches, the file-picker backgrounding the page, etc.
-// Key: `${username}::${room}`  Value: setTimeout timer ID
-const pendingLeaveTimers = new Map();
+// ── 10-Minute Grace Period ───────────────────────────────────────────────────
+// If a user disconnects, we wait 10 minutes before notifying the room.
+// Key: username  Value: setTimeout timer ID
+const disconnectTimers = {};
 
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
@@ -68,11 +66,10 @@ io.on("connection", (socket) => {
     io.in(room).emit("update_members", roomUsers[room]);
 
     // ── Grace-window check: suppress notification if user just left ──
-    const graceKey = `${username}::${room}`;
-    if (pendingLeaveTimers.has(graceKey)) {
-      // They're back within 5 s — cancel the leave timer, send NO notifications
-      clearTimeout(pendingLeaveTimers.get(graceKey));
-      pendingLeaveTimers.delete(graceKey);
+    if (disconnectTimers[username]) {
+      // They're back within 10 mins — cancel the leave timer, send NO notifications
+      clearTimeout(disconnectTimers[username]);
+      delete disconnectTimers[username];
       console.log(`⚡ ${username} re-joined '${room}' within grace window — suppressing notifications`);
     } else {
       // Genuinely new join — notify everyone else
@@ -179,30 +176,59 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ── Manual Leave Override ─────────────────────────────────────────────────
+  socket.on("manual_leave", (data) => {
+    const { room, username } = data;
+    
+    // Clear any active grace timer for this user
+    if (disconnectTimers[username]) {
+      clearTimeout(disconnectTimers[username]);
+      delete disconnectTimers[username];
+    }
+    
+    console.log(`User ${username} manually left room: ${room}`);
+
+    // Remove user from tracking
+    if (roomUsers[room]) {
+      roomUsers[room] = roomUsers[room].filter(user => user.username !== username);
+      io.in(room).emit("update_members", roomUsers[room]);
+    }
+
+    // Broadcast immediately
+    io.in(room).emit("receive_notification", {
+      author: 'System',
+      message: `${username} left the room`,
+      time: Date.now(),
+      type: 'notification'
+    });
+    
+    socket.leave(room);
+  });
+
   // ── Disconnect ────────────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     console.log("User Disconnected:", socket.id);
     for (const room in roomUsers) {
       // Find the user BEFORE removing them so we can get their username
       const leavingUser = roomUsers[room].find(user => user.id === socket.id);
-      roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
-      io.in(room).emit("update_members", roomUsers[room]);
-
+      
       if (leavingUser) {
-        const graceKey = `${leavingUser.username}::${room}`;
-        // Start a 5-second grace window.
-        // If the same username re-joins before it expires, the timer is
+        roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
+        io.in(room).emit("update_members", roomUsers[room]);
+        
+        const username = leavingUser.username;
+        // Start a 10-minute grace window.
+        // If the user re-joins before it expires, the timer is
         // cancelled in join_room and no notification is sent at all.
-        const timer = setTimeout(() => {
-          pendingLeaveTimers.delete(graceKey);
+        disconnectTimers[username] = setTimeout(() => {
+          delete disconnectTimers[username];
           io.in(room).emit("receive_notification", {
             author: 'System',
-            message: `${leavingUser.username} left the room`,
+            message: `${username} left the room`,
             time: Date.now(),
             type: 'notification'
           });
-        }, 5000); // 5-second grace window
-        pendingLeaveTimers.set(graceKey, timer);
+        }, 10 * 60 * 1000); // 10-minute grace window
       }
     }
   });
