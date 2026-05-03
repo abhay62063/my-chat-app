@@ -170,7 +170,7 @@ export default function App() {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {isMobile && (
-            <TopBar onMenuClick={() => setIsSidebarOpen(true)} room={room} theme={theme} />
+            <TopBar onMenuClick={() => setIsSidebarOpen(true)} room={room} theme={theme} members={members} />
           )}
           <ChatArea
             socket={socket}

@@ -56,12 +56,18 @@ io.on("connection", (socket) => {
 
     socket.join(room);
 
-    // Add user to room tracking (avoid duplicates by socket id)
+    // Add user to room tracking (avoid duplicates by username)
     if (!roomUsers[room]) roomUsers[room] = [];
-    const alreadyTracked = roomUsers[room].find(u => u.id === socket.id);
-    if (!alreadyTracked) {
+    const alreadyTracked = roomUsers[room].find(u => u.username === username);
+    if (alreadyTracked) {
+      alreadyTracked.id = socket.id;
+    } else {
       roomUsers[room].push({ id: socket.id, username });
     }
+
+    // Ensure uniqueness just in case
+    const uniqueUsers = Array.from(new Map(roomUsers[room].map(item => [item.username, item])).values());
+    roomUsers[room] = uniqueUsers;
 
     console.log(`User ${username} joined room: ${room}`);
     io.in(room).emit("update_members", roomUsers[room]);
@@ -204,10 +210,6 @@ io.on("connection", (socket) => {
       const leavingUser = roomUsers[room].find(u => u.id === socket.id);
       if (!leavingUser) continue;
 
-      // Remove from member list immediately so the sidebar is accurate
-      roomUsers[room] = roomUsers[room].filter(u => u.id !== socket.id);
-      io.in(room).emit("update_members", roomUsers[room]);
-
       const { username } = leavingUser;
       const graceKey = `${username}::${room}`;
 
@@ -218,6 +220,11 @@ io.on("connection", (socket) => {
 
       disconnectTimers[graceKey] = setTimeout(() => {
         delete disconnectTimers[graceKey];
+        
+        // Remove from member list only after grace period
+        roomUsers[room] = roomUsers[room].filter(u => u.username !== username);
+        io.in(room).emit("update_members", roomUsers[room]);
+
         io.in(room).emit("receive_notification", {
           author: 'System',
           message: `${username} left the room`,
@@ -225,7 +232,7 @@ io.on("connection", (socket) => {
           type: 'notification'
         });
         console.log(`⏰ Grace expired — ${username} left '${room}'`);
-      }, 5 * 60 * 1000); // 5-minute grace window
+      }, 10 * 60 * 1000); // 10-minute grace window
 
       console.log(`⏳ Grace timer started for ${username} in '${room}'`);
     }

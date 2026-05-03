@@ -1,9 +1,10 @@
 import { Menu, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export function TopBar({ onMenuClick, room, theme }) {
+export function TopBar({ onMenuClick, room, theme, members }) {
   const isDark = theme === 'dark';
   const currentRoomId = room || "Join a Room";
+  const onlineCount = members ? members.length : 0;
 
   return (
     <div
@@ -23,10 +24,10 @@ export function TopBar({ onMenuClick, room, theme }) {
           <Menu className={`w-6 h-6 ${isDark ? 'text-cyan-400' : 'text-blue-500'}`} strokeWidth={2} />
         </motion.button>
 
-        {/* Room ID */}
+        {/* Room ID and Online Count */}
         <div className="flex-1 flex justify-center px-2">
           <div
-            className="rounded-lg px-3 py-1.5"
+            className="rounded-lg px-3 py-1.5 flex items-center gap-2"
             style={isDark
               ? { background: 'linear-gradient(90deg,rgba(34,211,238,0.15),rgba(59,130,246,0.15))', border: '1px solid rgba(34,211,238,0.25)' }
               : { background: '#eff6ff', border: '1px solid #bfdbfe' }
@@ -35,6 +36,17 @@ export function TopBar({ onMenuClick, room, theme }) {
             <code className={`text-xs font-semibold font-['Outfit',sans-serif] ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
               {currentRoomId}
             </code>
+            {onlineCount > 0 && (
+              <div className="flex items-center gap-1.5 border-l pl-2" style={{ borderColor: isDark ? 'rgba(34,211,238,0.2)' : '#93c5fd' }}>
+                <div className="relative w-1.5 h-1.5">
+                  <div className="w-full h-full bg-green-400 rounded-full" />
+                  <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-75" />
+                </div>
+                <span className={`text-[10px] font-medium ${isDark ? 'text-cyan-100' : 'text-blue-700'}`}>
+                  {onlineCount}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

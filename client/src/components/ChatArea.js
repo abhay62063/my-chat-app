@@ -229,41 +229,50 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
     }
 
     return (
-      <div className="flex justify-center my-2">
-        <span
+      <div className="flex justify-center my-3 w-full">
+        <div
+          className="relative overflow-hidden"
           style={{
-            fontSize: '0.7rem',
-            fontWeight: 400,
-            letterSpacing: '0.04em',
+            fontSize: '0.65rem',
+            fontWeight: 500,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
             color: isJoin
-              ? 'rgba(34, 211, 238, 0.95)'   // cyan for join
+              ? 'rgba(34, 211, 238, 0.95)'
               : isLeave
-                ? 'rgba(252, 165, 165, 0.9)' // soft red for leave
+                ? 'rgba(252, 165, 165, 0.9)'
                 : 'rgba(255, 255, 255, 0.75)',
             background: isJoin
-              ? 'rgba(34, 211, 238, 0.07)'
+              ? 'linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent)'
               : isLeave
-                ? 'rgba(239, 68, 68, 0.08)'
-                : 'rgba(30, 41, 59, 0.55)',
-            border: isJoin
-              ? '1px solid rgba(34, 211, 238, 0.2)'
+                ? 'linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.1), transparent)'
+                : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',
+            borderTop: isJoin
+              ? '1px solid rgba(34, 211, 238, 0.25)'
               : isLeave
-                ? '1px solid rgba(239, 68, 68, 0.2)'
-                : '1px solid rgba(255,255,255,0.08)',
-            boxShadow: isJoin
-              ? '0 0 12px rgba(34,211,238,0.12)'
+                ? '1px solid rgba(239, 68, 68, 0.25)'
+                : '1px solid rgba(255, 255, 255, 0.1)',
+            borderBottom: isJoin
+              ? '1px solid rgba(34, 211, 238, 0.25)'
               : isLeave
-                ? '0 0 12px rgba(239,68,68,0.1)'
-                : 'none',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            padding: '4px 14px',
-            borderRadius: '999px',
+                ? '1px solid rgba(239, 68, 68, 0.25)'
+                : '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            padding: '6px 0',
+            width: '100%',
+            maxWidth: '350px',
+            textAlign: 'center',
             userSelect: 'none',
+            boxShadow: isJoin
+              ? '0 4px 15px rgba(34,211,238,0.05)'
+              : isLeave
+                ? '0 4px 15px rgba(239,68,68,0.05)'
+                : 'none',
           }}
         >
           {displayText}
-        </span>
+        </div>
       </div>
     );
   }
