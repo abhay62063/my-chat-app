@@ -25,6 +25,8 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [showChat, setShowChat] = useState(false);
   const [members, setMembers] = useState([]);
+  // Banner shown when the session was ended by the Page Visibility guard
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   // ── Theme Toggle ────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'light');
@@ -55,6 +57,38 @@ export default function App() {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // ── Page Visibility API — Security Guard ──────────────────────────────────
+  // When the user backgrounds the app (switches tabs, apps, or the screen
+  // locks), disconnect the socket immediately. The server's existing
+  // 'disconnect' handler will emit the 'left the room' notification to peers
+  // automatically — no extra backend code needed.
+  // On returning, reconnect and silently re-join the room.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        // User left — cut the connection so peers see them leave cleanly
+        if (socket.connected) socket.disconnect();
+      } else {
+        // User returned — reconnect and re-join if they were in a room
+        if (!socket.connected) {
+          socket.connect();
+          if (showChat && room && username) {
+            // Small delay to let the socket handshake complete
+            setTimeout(() => {
+              socket.emit('join_room', { room, username });
+            }, 400);
+            // Show the security banner so the user knows what happened
+            setSessionEnded(true);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  // showChat/room/username must be in deps so the closure captures fresh values
+  }, [showChat, room, username]);
 
   // ── Visual Viewport Height (keyboard-aware) ──────────────────────────────
   // Writes --vvh to <html> so the app shrinks exactly when the soft keyboard
@@ -144,6 +178,8 @@ export default function App() {
             showChat={showChat}
             theme={theme}
             toggleTheme={toggleTheme}
+            sessionEnded={sessionEnded}
+            clearSessionEnded={() => setSessionEnded(false)}
           />
         </div>
       </div>

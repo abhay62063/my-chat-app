@@ -66,6 +66,9 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
   const isVideo = msg.mediaType === 'video';
   const time = msg.time || Date.now();
 
+  const hasSeen = msg.seenBy && msg.seenBy.length > 0;
+  const seenTooltip = hasSeen ? `Seen by: ${msg.seenBy.join(', ')}` : 'Sent';
+
   return (
     <div
       style={{
@@ -123,7 +126,7 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         <Download size={14} color={isDark ? '#22d3ee' : '#3b82f6'} />
       </button>
 
-      {/* Caption bar */}
+      {/* Caption bar — label + time + read receipt */}
       <div style={{
         padding: '4px 10px 6px',
         fontSize: '0.65rem',
@@ -134,7 +137,18 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         background: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(248,250,252,0.8)',
       }}>
         <span style={{ fontStyle: 'italic' }}>{isVideo ? '🎬 Video' : '🖼 Image'}</span>
-        <span>{msg.time}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {msg.time}
+          {/* Read-receipt ticks — only visible on sender's side */}
+          {isOwn && (
+            <span title={seenTooltip} style={{ display: 'flex', alignItems: 'center', cursor: 'help' }}>
+              {hasSeen
+                ? <CheckCheck size={11} color="#60a5fa" />
+                : <Check size={11} color={isDark ? '#6b7280' : '#94a3b8'} />
+              }
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
@@ -224,7 +238,7 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
   );
 };
 
-export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, showChat, theme, toggleTheme }) {
+export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, showChat, theme, toggleTheme, sessionEnded, clearSessionEnded }) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -603,6 +617,55 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
 
       {/* Messages — flex-1 min-h-0 is the key: lets this div shrink so the input bar is never pushed off screen */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 chat-messages">
+
+        {/* ── Session-ended security banner ── */}
+        <AnimatePresence>
+          {sessionEnded && (
+            <motion.div
+              initial={{ opacity: 0, y: -12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.97 }}
+              transition={{ duration: 0.25 }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 14px',
+                borderRadius: '14px',
+                marginBottom: '4px',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                background: isDark
+                  ? 'rgba(239,68,68,0.12)'
+                  : 'rgba(239,68,68,0.08)',
+                border: isDark
+                  ? '1px solid rgba(239,68,68,0.35)'
+                  : '1px solid rgba(239,68,68,0.25)',
+                color: isDark ? '#fca5a5' : '#dc2626',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span style={{ fontSize: '1rem' }}>👻</span>
+              <span style={{ flex: 1 }}>
+                Session paused — you left the app. You have been reconnected.
+              </span>
+              <button
+                onClick={clearSessionEnded}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  color: 'inherit',
+                  opacity: 0.7,
+                  padding: '0 2px',
+                  lineHeight: 1,
+                }}
+                title="Dismiss"
+              >✕</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {messageList.map((msg, index) => (
           <MessageItem 
             key={msg.msgId || index}
