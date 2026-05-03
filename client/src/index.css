@@ -9,11 +9,37 @@
 /* ── Base resets ─────────────────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent; /* Remove tap flash on iOS */
 }
 
-html, body, #root {
-  height: 100%;
-  overscroll-behavior: none; /* Kill iOS rubber-band bounce on root */
+/* Initialise --vvh in CSS as a safe fallback. JS (Visual Viewport API) will
+   override this on every keyboard / address-bar resize event.                */
+:root {
+  --vvh: 100dvh;
+}
+
+html {
+  /* Lock html from scrolling — the app controls its own scroll containers */
+  overflow: hidden;
+  overscroll-behavior: none;
+  /* Prevent whole-page drag on iOS that can expose the background */
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  overflow: hidden;            /* No page-level scroll ever */
+  overscroll-behavior: none;
+  position: fixed;             /* Instagram/WKWebView patch: prevents
+                                  the address bar resize from scrolling body */
+  width: 100%;
+  /* height is driven by JS via --vvh */
+  height: var(--vvh, 100dvh);
+}
+
+#root {
+  height: 100%;                /* Fills body exactly */
+  overflow: hidden;
 }
 
 /* ── GhostLink neon wordmark ─────────────────────────────────────────────── */
@@ -122,4 +148,21 @@ html, body, #root {
   .chat-input-area {
     padding-bottom: calc(0.625rem + env(safe-area-inset-bottom));
   }
+}
+
+/* ── Chat messages: the ONLY element allowed to scroll vertically ─────────── */
+/* overflow-y:auto is already applied via Tailwind's overflow-y-auto class    */
+/* but we reinforce it here and ensure -webkit-overflow-scrolling for iOS.    */
+.chat-messages {
+  -webkit-overflow-scrolling: touch; /* Momentum scrolling inside the list */
+  overscroll-behavior: contain;      /* Prevent scroll chaining to body    */
+}
+
+/* ── Instagram / WKWebView visual-viewport offset patch ─────────────────── */
+/* When window.visualViewport.offsetTop > 0 (keyboard is open and the        */
+/* viewport has been pushed up), the JS hook already adjusts --vvh.          */
+/* This rule ensures the root container never exceeds the visual height.     */
+.app-root {
+  max-height: var(--vvh, 100dvh);
+  overflow: hidden;
 }

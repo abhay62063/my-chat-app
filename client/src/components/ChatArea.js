@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -51,13 +51,104 @@ const t = {
   title: (dark) => dark ? 'text-white' : 'text-slate-800',
 };
 
+// ── Media Download helper ────────────────────────────────────────────────────
+const downloadMedia = (base64, mediaType, time) => {
+  const ext = mediaType === 'video' ? 'mp4' : 'png';
+  const filename = `GhostLink_Media_${time}.${ext}`;
+  const link = document.createElement('a');
+  link.href = base64;
+  link.download = filename;
+  link.click();
+};
+
+// ── MediaBubble: cinematic glassmorphism frame for shared images & videos ────
+const MediaBubble = ({ msg, isOwn, isDark }) => {
+  const isVideo = msg.mediaType === 'video';
+  const time = msg.time || Date.now();
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        borderRadius: '1.25rem',
+        overflow: 'hidden',
+        maxWidth: '280px',
+        border: isDark
+          ? '1.5px solid rgba(34,211,238,0.35)'
+          : '1.5px solid rgba(59,130,246,0.3)',
+        boxShadow: isDark
+          ? '0 0 24px rgba(34,211,238,0.18), 0 4px 24px rgba(0,0,0,0.5)'
+          : '0 4px 24px rgba(59,130,246,0.15)',
+        background: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.6)',
+        backdropFilter: 'blur(12px)',
+      }}
+    >
+      {isVideo ? (
+        <video
+          src={msg.mediaBase64}
+          controls
+          style={{ display: 'block', width: '100%', maxHeight: '240px', objectFit: 'cover' }}
+        />
+      ) : (
+        <img
+          src={msg.mediaBase64}
+          alt="shared"
+          style={{ display: 'block', width: '100%', maxHeight: '260px', objectFit: 'cover' }}
+        />
+      )}
+
+      {/* Download button — top-right corner overlay */}
+      <button
+        onClick={() => downloadMedia(msg.mediaBase64, msg.mediaType, time)}
+        title="Save to device"
+        style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          background: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)',
+          border: isDark ? '1px solid rgba(34,211,238,0.4)' : '1px solid rgba(59,130,246,0.3)',
+          borderRadius: '50%',
+          width: '32px',
+          height: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          backdropFilter: 'blur(8px)',
+          transition: 'transform 0.15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+      >
+        <Download size={14} color={isDark ? '#22d3ee' : '#3b82f6'} />
+      </button>
+
+      {/* Caption bar */}
+      <div style={{
+        padding: '4px 10px 6px',
+        fontSize: '0.65rem',
+        color: isDark ? 'rgba(156,163,175,0.9)' : 'rgba(100,116,139,0.9)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(248,250,252,0.8)',
+      }}>
+        <span style={{ fontStyle: 'italic' }}>{isVideo ? '🎬 Video' : '🖼 Image'}</span>
+        <span>{msg.time}</span>
+      </div>
+    </div>
+  );
+};
+
 // ── Message Item Component (Handles Visibility & Seen Status) ───────────────
 const MessageItem = ({ msg, username, isDark, socket, room }) => {
   const isOwn = username === msg.author;
   const ref = useRef(null);
 
+  // All hooks must be called unconditionally (Rules of Hooks).
+  // For notification messages the IntersectionObserver is a no-op.
   useEffect(() => {
-    // If it's our own message, or we already saw it, do nothing.
+    if (msg.type === 'notification') return; // Skip for system messages
     if (isOwn) return;
     if (msg.seenBy && msg.seenBy.includes(username)) return;
 
@@ -75,6 +166,37 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
 
     return () => observer.disconnect();
   }, [isOwn, msg, username, socket, room]);
+
+  // ── Notification (system) messages render as a centered pill ─────────────
+  if (msg.type === 'notification') {
+    return (
+      <div className="flex justify-center my-1">
+        <span
+          style={{
+            fontSize: '0.7rem',
+            fontStyle: 'italic',
+            color: isDark ? 'rgba(156,163,175,0.85)' : 'rgba(100,116,139,0.85)',
+            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+            padding: '2px 12px',
+            borderRadius: '999px',
+            userSelect: 'none',
+          }}
+        >
+          {msg.message}
+        </span>
+      </div>
+    );
+  }
+
+  // ── Media messages (image / video) ────────────────────────────────────────
+  if (msg.type === 'image' || msg.type === 'video') {
+    return (
+      <div ref={ref} className={`flex flex-col gap-1 ${isOwn ? 'items-end' : 'items-start'}`}>
+        <p className={`text-[10px] font-bold px-1 ${t.author(isDark)}`}>{msg.author}</p>
+        <MediaBubble msg={msg} isOwn={isOwn} isDark={isDark} />
+      </div>
+    );
+  }
 
   const hasSeen = msg.seenBy && msg.seenBy.length > 0;
   const seenTooltip = hasSeen ? `Seen by: ${msg.seenBy.join(', ')}` : 'Sent';
@@ -110,6 +232,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [menuOpen, setMenuOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
+  const fileInputRef = useRef(null);         // Hidden file picker for media
   const isInitialLoad = useRef(true); // Track first history load vs live messages
   const isDark = theme === 'dark';
 
@@ -155,6 +278,32 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     setMessageList((list) => [...list, { ...messageData, message: currentMessage }]);
     setCurrentMessage("");
     socket.emit("stop_typing", { room });
+  };
+
+  // ── Send Multimedia (image / video via Base64) ───────────────────────────
+  const sendMultimedia = (file) => {
+    if (!file) return;
+    const isVideo = file.type.startsWith('video/');
+    const mediaType = isVideo ? 'video' : 'image';
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const base64 = reader.result;  // data:image/...;base64,...
+      const msgId = Date.now().toString() + Math.random().toString(36).substring(2);
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const payload = { msgId, room, author: username, mediaBase64: base64, mediaType, time };
+
+      // Emit to server (server saves placeholder, relays Base64 to peers)
+      socket.emit('send_multimedia', payload);
+
+      // Show immediately in the sender's own chat
+      setMessageList((list) => [...list, { ...payload, type: mediaType }]);
+    };
+
+    reader.readAsDataURL(file);
+    // Reset so the same file can be picked again
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleTyping = (e) => {
@@ -213,6 +362,16 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       setMessageList((list) => [...list, { ...data, message: decrypt(data.message, password) }]);
     });
 
+    // System join/leave notifications — no decryption needed, never saved to DB
+    socket.on("receive_notification", (data) => {
+      setMessageList((list) => [...list, data]);
+    });
+
+    // Incoming multimedia from a peer — append with full Base64 for rendering
+    socket.on("receive_multimedia", (data) => {
+      setMessageList((list) => [...list, { ...data, type: data.mediaType }]);
+    });
+
     // Handle status updates for seen messages
     socket.on("status_updated", ({ msgId, seenBy }) => {
       setMessageList((list) => list.map(msg => 
@@ -234,6 +393,8 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
 
     return () => {
       socket.off("receive_message");
+      socket.off("receive_notification");
+      socket.off("receive_multimedia");
       socket.off("status_updated");
       socket.off("display_typing");
       socket.off("hide_typing");
@@ -475,7 +636,29 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
 
       {/* Input — sticky bottom-0 keeps it anchored above the mobile keyboard */}
       <div className={`flex-shrink-0 sticky bottom-0 z-10 p-3 chat-input-area ${t.inputArea(isDark)}`}>
+        {/* Hidden file input — accepts images and videos */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          style={{ display: 'none' }}
+          onChange={(e) => sendMultimedia(e.target.files[0])}
+        />
+
         <div className={`flex items-center gap-2 rounded-full p-1.5 border transition-all shadow-inner ${isDark ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50' : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'}`}>
+          {/* Attachment button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            title="Share image or video"
+            className={`p-2 rounded-full transition-all flex-shrink-0 ${
+              isDark
+                ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/10'
+                : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100'
+            }`}
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+
           <input
             type="text"
             value={currentMessage}

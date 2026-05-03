@@ -27,7 +27,7 @@ export default function App() {
   const [members, setMembers] = useState([]);
 
   // ── Theme Toggle ────────────────────────────────────────────────────────────
-  const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'light');
 
   useEffect(() => {
     localStorage.setItem('chat-theme', theme);
@@ -56,6 +56,37 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // ── Visual Viewport Height (keyboard-aware) ──────────────────────────────
+  // Writes --vvh to <html> so the app shrinks exactly when the soft keyboard
+  // appears in Instagram/Safari/Chrome in-app browsers. 100dvh and
+  // window.innerHeight are both unreliable in these environments.
+  useEffect(() => {
+    const setVvh = () => {
+      const h = window.visualViewport
+        ? window.visualViewport.height
+        : window.innerHeight;
+      document.documentElement.style.setProperty('--vvh', `${h}px`);
+    };
+
+    setVvh(); // Set immediately before first paint
+
+    const vvp = window.visualViewport;
+    if (vvp) {
+      vvp.addEventListener('resize', setVvh);
+      vvp.addEventListener('scroll', setVvh);
+    }
+    // Fallback for browsers without Visual Viewport API
+    window.addEventListener('resize', setVvh);
+
+    return () => {
+      if (vvp) {
+        vvp.removeEventListener('resize', setVvh);
+        vvp.removeEventListener('scroll', setVvh);
+      }
+      window.removeEventListener('resize', setVvh);
+    };
+  }, []);
+
   // ── Join Room ───────────────────────────────────────────────────────────────
   // NOTE: socket.emit("join_room") is intentionally done INSIDE ChatArea
   // so the message_history listener is guaranteed to be registered first.
@@ -69,8 +100,8 @@ export default function App() {
 
   return (
     <div
-      className="relative overflow-hidden font-['Inter',sans-serif]"
-      style={{ height: '100dvh', color: isDark ? 'white' : '#1a1a2e' }}
+      className="app-root relative overflow-hidden font-['Inter',sans-serif]"
+      style={{ height: 'var(--vvh, 100dvh)', color: isDark ? 'white' : '#1a1a2e' }}
     >
       {/* ── Backgrounds ── */}
       {isDark ? (

@@ -16,8 +16,9 @@ const messageSchema = new mongoose.Schema({
   msgId: { type: String, required: true, unique: true },
   room: { type: String, required: true, index: true },
   author: { type: String, required: true },
-  message: { type: String, required: true }, // Encrypted ciphertext stored here
+  message: { type: String, required: true }, // Encrypted ciphertext OR placeholder text
   time: { type: String, required: true },
+  type: { type: String, default: 'text' },   // 'text' | 'image' | 'video'
   seenBy: { type: [String], default: [] }
 }, { timestamps: true });
 
@@ -59,6 +60,14 @@ io.on("connection", (socket) => {
     // Broadcast updated members list
     io.in(room).emit("update_members", roomUsers[room]);
 
+    // Notify everyone ELSE in the room that this user joined
+    socket.to(room).emit("receive_notification", {
+      author: 'System',
+      message: `${username} joined the room`,
+      time: Date.now(),
+      type: 'notification'
+    });
+
     // Fetch last 200 messages for this room and send only to the joining user
     try {
       const history = await Message.find({ room })
@@ -97,6 +106,33 @@ io.on("connection", (socket) => {
     socket.to(data.room).emit("receive_message", data);
   });
 
+  // ── Send Multimedia (image / video) ──────────────────────────────────────
+  // CRITICAL: Only the placeholder text is saved to MongoDB.
+  // The actual Base64 payload is relayed over the socket ONLY — never stored.
+  socket.on("send_multimedia", async (data) => {
+    // data = { msgId, room, author, mediaBase64, mediaType ('image'|'video'), time }
+    const placeholder = data.mediaType === 'video' ? '[Video Shared]' : '[Image Shared]';
+
+    try {
+      const newMessage = new Message({
+        msgId: data.msgId,
+        room: data.room,
+        author: data.author,
+        message: placeholder,   // ← lightweight text, NOT the Base64
+        time: data.time,
+        type: data.mediaType,   // 'image' or 'video'
+        seenBy: []
+      });
+      await newMessage.save();
+      console.log(`🖼️  Multimedia placeholder saved for room: ${data.room} [${data.mediaType}]`);
+    } catch (err) {
+      console.error("❌ Error saving multimedia placeholder:", err);
+    }
+
+    // Relay the FULL payload (including Base64) only to peers — not back to sender
+    socket.to(data.room).emit("receive_multimedia", data);
+  });
+
   // ── Typing Indicators ─────────────────────────────────────────────────────
   socket.on("typing", (data) => {
     socket.to(data.room).emit("display_typing", data);
@@ -131,8 +167,20 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("User Disconnected:", socket.id);
     for (const room in roomUsers) {
+      // Find the user BEFORE removing them so we can get their username
+      const leavingUser = roomUsers[room].find(user => user.id === socket.id);
       roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
       io.in(room).emit("update_members", roomUsers[room]);
+
+      // Emit a leave notification only if this socket was tracked in this room
+      if (leavingUser) {
+        io.in(room).emit("receive_notification", {
+          author: 'System',
+          message: `${leavingUser.username} left the room`,
+          time: Date.now(),
+          type: 'notification'
+        });
+      }
     }
   });
 });

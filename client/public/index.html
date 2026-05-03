@@ -4,11 +4,12 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-  <!-- interactive-widget=resizes-content: tells mobile browsers to shrink the
-       layout (not the viewport) when the keyboard appears, keeping the input
-       bar anchored above the keyboard at all times.                           -->
+  <!-- interactive-widget=resizes-content: tells modern mobile browsers to shrink
+       the layout (not the viewport) when the keyboard appears, keeping the input
+       bar anchored. maximum-scale=1 prevents iOS Safari auto-zoom on input focus
+       which pushes the input field out of view.                                 -->
   <meta name="viewport"
-        content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+        content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#050505" />
   <meta name="description"
         content="GhostLink — End-to-End Encrypted Private Messaging. Zero logs, zero traces." />
@@ -26,6 +27,23 @@
         rel="stylesheet" />
 
   <title>GhostLink — Encrypted Chat</title>
+  <!-- Bootstrap script: runs synchronously before React paints.
+       1. Sets data-theme so CSS picks the right colours from frame 0.
+       2. Sets --vvh from the Visual Viewport API (falls back to window.innerHeight)
+          so the app never flashes the wrong height before JS hydrates.
+       Both the theme and Instagram/Safari in-app browser keyboard patches
+       depend on these two lines firing as early as possible.               -->
+  <script>
+    (function () {
+      /* Theme */
+      var saved = localStorage.getItem('chat-theme');
+      document.documentElement.setAttribute('data-theme', saved || 'light');
+
+      /* Visual viewport height — keyboard-aware, Instagram/Safari safe */
+      var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+      document.documentElement.style.setProperty('--vvh', h + 'px');
+    })();
+  </script>
 </head>
 
 <body>
