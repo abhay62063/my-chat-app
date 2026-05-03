@@ -632,37 +632,41 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.22 }}
             style={{
-              position: 'absolute',
-              top: '14px',
+              position: 'fixed',
+              top: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
-              zIndex: 200,
+              zIndex: 9999,
+              width: '90%',
+              maxWidth: '400px',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'space-between',
               gap: '8px',
-              padding: '9px 16px',
-              borderRadius: '999px',
-              fontSize: '0.72rem',
+              padding: '12px 16px',
+              borderRadius: '12px',
+              fontSize: '0.8rem',
               fontWeight: 600,
-              whiteSpace: 'nowrap',
-              maxWidth: 'calc(100% - 32px)',
               background: isDark
-                ? 'rgba(15,15,35,0.92)'
-                : 'rgba(255,255,255,0.95)',
+                ? 'rgba(15,15,35,0.75)'
+                : 'rgba(255,255,255,0.85)',
               border: isDark
-                ? '1px solid rgba(239,68,68,0.4)'
-                : '1px solid rgba(239,68,68,0.3)',
+                ? '1px solid rgba(255,255,255,0.1)'
+                : '1px solid rgba(0,0,0,0.05)',
               color: isDark ? '#fca5a5' : '#dc2626',
               boxShadow: isDark
-                ? '0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(239,68,68,0.15)'
-                : '0 4px 20px rgba(0,0,0,0.12)',
+                ? '0 8px 32px rgba(0,0,0,0.5)'
+                : '0 8px 32px rgba(0,0,0,0.1)',
               backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
             }}
           >
-            <span>👻</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Session paused — reconnected automatically.
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <span>👻</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Session paused — reconnected automatically.
+              </span>
+            </div>
             <button
               onClick={clearSessionEnded}
               style={{

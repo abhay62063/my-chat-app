@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { LogOut, X, Shield } from 'lucide-react';
 
-export function Sidebar({ isOpen, onClose, isMobile, room, username, members, theme }) {
+export function Sidebar({ isOpen, onClose, isMobile, room, username, members, theme, leaveRoom }) {
   const isDark = theme === 'dark';
   const currentRoomId = room || "No Room Joined";
   const onlineCount = members ? members.length : 0;
@@ -115,7 +115,7 @@ export function Sidebar({ isOpen, onClose, isMobile, room, username, members, th
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => window.location.reload()}
+          onClick={leaveRoom}
           className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}
         >

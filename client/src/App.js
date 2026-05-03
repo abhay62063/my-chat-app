@@ -206,6 +206,7 @@ export default function App() {
           username={username}
           members={members}
           theme={theme}
+          leaveRoom={leaveRoom}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
