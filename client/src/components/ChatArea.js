@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2 } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 import imageCompression from 'browser-image-compression';
 
@@ -188,11 +188,15 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
       <div className="flex justify-center my-1">
         <span
           style={{
-            fontSize: '0.7rem',
-            fontStyle: 'italic',
-            color: isDark ? 'rgba(156,163,175,0.85)' : 'rgba(100,116,139,0.85)',
-            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-            padding: '2px 12px',
+            fontSize: '0.75rem', // 12px
+            fontWeight: 500,
+            color: 'rgba(255, 255, 255, 0.9)',
+            background: 'rgba(30, 41, 59, 0.65)', // Dark glassmorphism
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            padding: '4px 16px',
             borderRadius: '999px',
             userSelect: 'none',
           }}
@@ -246,6 +250,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [whoIsTyping, setWhoIsTyping] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
@@ -535,11 +540,19 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="Room Password (Encryption Key)..."
-                  className={`w-full rounded-xl py-3 pl-11 pr-4 outline-none transition-all text-sm ${t.input(isDark)}`}
+                  className={`w-full rounded-xl py-3 pl-11 pr-12 outline-none transition-all text-sm ${t.input(isDark)}`}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors ${isDark ? 'text-gray-400 hover:text-cyan-400' : 'text-slate-400 hover:text-blue-500'}`}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
 
               <motion.button
