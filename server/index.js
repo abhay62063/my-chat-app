@@ -35,45 +35,46 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  maxHttpBufferSize: 5e7 // Set to 50MB to allow large file transfers without crashing
+  maxHttpBufferSize: 5e7 // 50MB — allows large camera photos/videos
 });
 
-// Room users ko track karne ke liye object
+// ── Room tracking ─────────────────────────────────────────────────────────────
 const roomUsers = {};
 
-// ── 10-Minute Grace Period ───────────────────────────────────────────────────
-// If a user disconnects, we wait 10 minutes before notifying the room.
-// Key: username  Value: setTimeout timer ID
+// ── 5-Minute Grace Period ─────────────────────────────────────────────────────
+// Prevents "left" spam during tab switches, file-picker events and auto-reconnects.
+// Key: `${username}::${room}`  →  Value: setTimeout timer ID
 const disconnectTimers = {};
 
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
-  // ── Join Room (with history retrieval) ────────────────────────────────────
+  // ── Join Room ────────────────────────────────────────────────────────────────
   socket.on("join_room", async (data) => {
     const { room, username } = data;
+    const graceKey = `${username}::${room}`;
+
     socket.join(room);
 
-    // Add user to room tracking
+    // Add user to room tracking (avoid duplicates by socket id)
     if (!roomUsers[room]) roomUsers[room] = [];
-    const userExists = roomUsers[room].find(user => user.id === socket.id);
-    if (!userExists) {
+    const alreadyTracked = roomUsers[room].find(u => u.id === socket.id);
+    if (!alreadyTracked) {
       roomUsers[room].push({ id: socket.id, username });
     }
 
     console.log(`User ${username} joined room: ${room}`);
-
-    // Broadcast updated members list
     io.in(room).emit("update_members", roomUsers[room]);
 
-    // ── Grace-window check: suppress notification if user just left ──
-    if (disconnectTimers[username]) {
-      // They're back within 10 mins — cancel the leave timer, send NO notifications
-      clearTimeout(disconnectTimers[username]);
-      delete disconnectTimers[username];
-      console.log(`⚡ ${username} re-joined '${room}' within grace window — suppressing notifications`);
+    // ── Grace-window check ────────────────────────────────────────────────────
+    // If a timer is running it means this is a SILENT RECONNECT (tab switch /
+    // file-picker / auto-reconnect). Cancel it and send NO notification.
+    if (disconnectTimers[graceKey]) {
+      clearTimeout(disconnectTimers[graceKey]);
+      delete disconnectTimers[graceKey];
+      console.log(`⚡ ${username} silently reconnected to '${room}' — suppressing notifications`);
     } else {
-      // Genuinely new join — notify everyone else
+      // Genuine first join — notify everyone else in the room
       socket.to(room).emit("receive_notification", {
         author: 'System',
         message: `${username} joined the room`,
@@ -82,17 +83,14 @@ io.on("connection", (socket) => {
       });
     }
 
-    // Fetch last 200 messages for this room and send only to the joining user
+    // Fetch last 200 messages and send only to the joining user
     try {
       const history = await Message.find({ room })
         .sort({ createdAt: -1 })
         .limit(200)
         .lean();
-
-      // Reverse so oldest messages appear first in chat
-      const ordered = history.reverse();
-      socket.emit("message_history", ordered);
-      console.log(`📜 Sent ${ordered.length} history messages to ${username}`);
+      socket.emit("message_history", history.reverse());
+      console.log(`📜 Sent ${history.length} history messages to ${username}`);
     } catch (err) {
       console.error("❌ Error fetching message history:", err);
     }
@@ -100,50 +98,40 @@ io.on("connection", (socket) => {
 
   // ── Send Message (save encrypted message to DB) ───────────────────────────
   socket.on("send_message", async (data) => {
-    // data.message is the encrypted ciphertext from the client
     try {
       const newMessage = new Message({
         msgId: data.msgId,
         room: data.room,
         author: data.author,
-        message: data.message, // Encrypted ciphertext
+        message: data.message,
         time: data.time,
         seenBy: []
       });
       await newMessage.save();
-      console.log(`💾 Message saved to DB for room: ${data.room}`);
     } catch (err) {
       console.error("❌ Error saving message:", err);
     }
-
-    // Broadcast the encrypted message to all OTHER users in the room
     socket.to(data.room).emit("receive_message", data);
   });
 
-  // ── Send Multimedia (image / video) ──────────────────────────────────────
-  // CRITICAL: Only the placeholder text is saved to MongoDB.
-  // The actual Base64 payload is relayed over the socket ONLY — never stored.
+  // ── Send Multimedia ───────────────────────────────────────────────────────
+  // Only the placeholder text is saved to MongoDB. Base64 is relayed only.
   socket.on("send_multimedia", async (data) => {
-    // data = { msgId, room, author, mediaBase64, mediaType ('image'|'video'), time }
     const placeholder = data.mediaType === 'video' ? '[Video Shared]' : '[Image Shared]';
-
     try {
       const newMessage = new Message({
         msgId: data.msgId,
         room: data.room,
         author: data.author,
-        message: placeholder,   // ← lightweight text, NOT the Base64
+        message: placeholder,
         time: data.time,
-        type: data.mediaType,   // 'image' or 'video'
+        type: data.mediaType,
         seenBy: []
       });
       await newMessage.save();
-      console.log(`🖼️  Multimedia placeholder saved for room: ${data.room} [${data.mediaType}]`);
     } catch (err) {
       console.error("❌ Error saving multimedia placeholder:", err);
     }
-
-    // Relay the FULL payload (including Base64) only to peers — not back to sender
     socket.to(data.room).emit("receive_multimedia", data);
   });
 
@@ -156,9 +144,8 @@ io.on("connection", (socket) => {
     socket.to(data.room).emit("hide_typing");
   });
 
-  // ── Clear Chat (UI only - NO DB delete) ───────────────────────────────────
+  // ── Clear Chat (UI only) ──────────────────────────────────────────────────
   socket.on("clear_chat", (room) => {
-    // Only clears the local UI for everyone in the room; DB is untouched
     io.in(room).emit("chat_cleared");
   });
 
@@ -177,60 +164,70 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ── Manual Leave Override ─────────────────────────────────────────────────
+  // ── Manual Leave — Instant broadcast, no grace period ────────────────────
   socket.on("manual_leave", (data) => {
     const { room, username } = data;
-    
-    // Clear any active grace timer for this user
-    if (disconnectTimers[username]) {
-      clearTimeout(disconnectTimers[username]);
-      delete disconnectTimers[username];
-    }
-    
-    console.log(`User ${username} manually left room: ${room}`);
+    const graceKey = `${username}::${room}`;
 
-    // Remove user from tracking
+    // Cancel any pending timer so it doesn't fire a duplicate notification
+    if (disconnectTimers[graceKey]) {
+      clearTimeout(disconnectTimers[graceKey]);
+      delete disconnectTimers[graceKey];
+    }
+
+    // Remove from tracking
     if (roomUsers[room]) {
-      roomUsers[room] = roomUsers[room].filter(user => user.username !== username);
+      roomUsers[room] = roomUsers[room].filter(u => u.username !== username);
       io.in(room).emit("update_members", roomUsers[room]);
     }
 
-    // Broadcast immediately
+    // Broadcast the leave immediately
     io.in(room).emit("receive_notification", {
       author: 'System',
       message: `${username} left the room`,
       time: Date.now(),
       type: 'notification'
     });
-    
+
     socket.leave(room);
+    console.log(`🚪 ${username} manually left room: ${room}`);
   });
 
-  // ── Disconnect ────────────────────────────────────────────────────────────
+  // ── Disconnect — 5-Minute Grace Window ───────────────────────────────────
+  // Suppresses spurious "left" messages caused by tab switches, file pickers,
+  // and mobile auto-reconnects. If the user genuinely stays away for 5+ mins,
+  // the notification fires.
   socket.on("disconnect", () => {
     console.log("User Disconnected:", socket.id);
+
     for (const room in roomUsers) {
-      // Find the user BEFORE removing them so we can get their username
-      const leavingUser = roomUsers[room].find(user => user.id === socket.id);
-      
-      if (leavingUser) {
-        roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
-        io.in(room).emit("update_members", roomUsers[room]);
-        
-        const username = leavingUser.username;
-        // Start a 10-minute grace window.
-        // If the user re-joins before it expires, the timer is
-        // cancelled in join_room and no notification is sent at all.
-        disconnectTimers[username] = setTimeout(() => {
-          delete disconnectTimers[username];
-          io.in(room).emit("receive_notification", {
-            author: 'System',
-            message: `${username} left the room`,
-            time: Date.now(),
-            type: 'notification'
-          });
-        }, 10 * 60 * 1000); // 10-minute grace window
+      const leavingUser = roomUsers[room].find(u => u.id === socket.id);
+      if (!leavingUser) continue;
+
+      // Remove from member list immediately so the sidebar is accurate
+      roomUsers[room] = roomUsers[room].filter(u => u.id !== socket.id);
+      io.in(room).emit("update_members", roomUsers[room]);
+
+      const { username } = leavingUser;
+      const graceKey = `${username}::${room}`;
+
+      // Don't stack timers if one already exists for this user
+      if (disconnectTimers[graceKey]) {
+        clearTimeout(disconnectTimers[graceKey]);
       }
+
+      disconnectTimers[graceKey] = setTimeout(() => {
+        delete disconnectTimers[graceKey];
+        io.in(room).emit("receive_notification", {
+          author: 'System',
+          message: `${username} left the room`,
+          time: Date.now(),
+          type: 'notification'
+        });
+        console.log(`⏰ Grace expired — ${username} left '${room}'`);
+      }, 5 * 60 * 1000); // 5-minute grace window
+
+      console.log(`⏳ Grace timer started for ${username} in '${room}'`);
     }
   });
 });

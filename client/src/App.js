@@ -33,6 +33,9 @@ export default function App() {
   // The file picker backgrounds the page (visibilityState → 'hidden') on
   // Android and iOS, so we must NOT disconnect the socket during that window.
   const isPickingFile = useRef(false);
+  // Tracks whether the socket has connected at least once.
+  // Used to distinguish first-connect from auto-reconnect inside the 'connect' listener.
+  const wasConnected = useRef(false);
 
   // ── Theme Toggle ────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'light');
@@ -48,11 +51,15 @@ export default function App() {
   useEffect(() => {
     socket.on("connect", () => {
       console.log("Connected! ID:", socket.id);
-      // Automatically re-join room on auto-reconnection
-      if (showChat && room && username) {
+      if (wasConnected.current && showChat && room && username) {
+        // This is a RECONNECT (tab switch, network blip, file picker, etc.).
+        // Re-join the room silently — the server will suppress the notification
+        // because our 5-minute grace timer is still running.
+        console.log('🔄 Auto-reconnecting and re-joining room...');
         socket.emit("join_room", { room, username });
         setSessionEnded(true);
       }
+      wasConnected.current = true;
     });
     socket.on("update_members", (data) => setMembers(data));
     socket.on("connect_error", (err) => console.log("Connection Error:", err.message));

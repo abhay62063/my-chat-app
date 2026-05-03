@@ -95,9 +95,20 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         />
       ) : (
         <img
-          src={msg.mediaBase64}
-          alt="shared"
+          src={
+            // Ensure the Base64 string always has a valid data: URI prefix.
+            // If imageCompression returns a Blob URL or a raw base64 string without
+            // the prefix, the img tag will show broken. Always normalise here.
+            msg.mediaBase64 && msg.mediaBase64.startsWith('data:')
+              ? msg.mediaBase64
+              : `data:image/jpeg;base64,${msg.mediaBase64}`
+          }
+          alt="Shared image"
           style={{ display: 'block', width: '100%', maxHeight: '260px', objectFit: 'cover' }}
+          onError={(e) => {
+            // Fallback: if the src is still broken, hide the broken icon
+            e.currentTarget.style.opacity = '0.3';
+          }}
         />
       )}
 
@@ -243,7 +254,7 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
   );
 };
 
-export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, showChat, theme, toggleTheme, sessionEnded, clearSessionEnded, isPickingFile }) {
+export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, leaveRoom, showChat, theme, toggleTheme, sessionEnded, clearSessionEnded, isPickingFile }) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
