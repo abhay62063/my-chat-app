@@ -40,6 +40,13 @@ const io = new Server(server, {
 // Room users ko track karne ke liye object
 const roomUsers = {};
 
+// ── Rapid-reconnect grace window ───────────────────────────────────────────────
+// If a user disconnects and re-joins the SAME room within 5 seconds,
+// suppress both the 'left' and the 'joined' notifications to avoid spam
+// caused by fast tab-switches, the file-picker backgrounding the page, etc.
+// Key: `${username}::${room}`  Value: setTimeout timer ID
+const pendingLeaveTimers = new Map();
+
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
@@ -60,13 +67,22 @@ io.on("connection", (socket) => {
     // Broadcast updated members list
     io.in(room).emit("update_members", roomUsers[room]);
 
-    // Notify everyone ELSE in the room that this user joined
-    socket.to(room).emit("receive_notification", {
-      author: 'System',
-      message: `${username} joined the room`,
-      time: Date.now(),
-      type: 'notification'
-    });
+    // ── Grace-window check: suppress notification if user just left ──
+    const graceKey = `${username}::${room}`;
+    if (pendingLeaveTimers.has(graceKey)) {
+      // They're back within 5 s — cancel the leave timer, send NO notifications
+      clearTimeout(pendingLeaveTimers.get(graceKey));
+      pendingLeaveTimers.delete(graceKey);
+      console.log(`⚡ ${username} re-joined '${room}' within grace window — suppressing notifications`);
+    } else {
+      // Genuinely new join — notify everyone else
+      socket.to(room).emit("receive_notification", {
+        author: 'System',
+        message: `${username} joined the room`,
+        time: Date.now(),
+        type: 'notification'
+      });
+    }
 
     // Fetch last 200 messages for this room and send only to the joining user
     try {
@@ -172,14 +188,21 @@ io.on("connection", (socket) => {
       roomUsers[room] = roomUsers[room].filter(user => user.id !== socket.id);
       io.in(room).emit("update_members", roomUsers[room]);
 
-      // Emit a leave notification only if this socket was tracked in this room
       if (leavingUser) {
-        io.in(room).emit("receive_notification", {
-          author: 'System',
-          message: `${leavingUser.username} left the room`,
-          time: Date.now(),
-          type: 'notification'
-        });
+        const graceKey = `${leavingUser.username}::${room}`;
+        // Start a 5-second grace window.
+        // If the same username re-joins before it expires, the timer is
+        // cancelled in join_room and no notification is sent at all.
+        const timer = setTimeout(() => {
+          pendingLeaveTimers.delete(graceKey);
+          io.in(room).emit("receive_notification", {
+            author: 'System',
+            message: `${leavingUser.username} left the room`,
+            time: Date.now(),
+            type: 'notification'
+          });
+        }, 5000); // 5-second grace window
+        pendingLeaveTimers.set(graceKey, timer);
       }
     }
   });

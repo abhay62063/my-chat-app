@@ -238,7 +238,7 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
   );
 };
 
-export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, showChat, theme, toggleTheme, sessionEnded, clearSessionEnded }) {
+export function ChatArea({ socket, username, room, password, setUsername, setRoom, setPassword, joinRoom, showChat, theme, toggleTheme, sessionEnded, clearSessionEnded, isPickingFile }) {
   const [currentMessage, setCurrentMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -249,6 +249,13 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const fileInputRef = useRef(null);         // Hidden file picker for media
   const isInitialLoad = useRef(true); // Track first history load vs live messages
   const isDark = theme === 'dark';
+
+  // Auto-dismiss the session-ended toast after 3 seconds
+  useEffect(() => {
+    if (!sessionEnded) return;
+    const t = setTimeout(() => clearSessionEnded(), 3000);
+    return () => clearTimeout(t);
+  }, [sessionEnded, clearSessionEnded]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -316,7 +323,8 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     };
 
     reader.readAsDataURL(file);
-    // Reset so the same file can be picked again
+    // Reset file-picker guard and input value so same file can be re-picked
+    if (isPickingFile) isPickingFile.current = false;
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -529,7 +537,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   // ── Chat Interface ─────────────────────────────────────────────────────────
   return (
     // h-full + flex-col: fills the available viewport; min-h-0 prevents overflow pushing input off-screen
-    <div className="flex-1 flex flex-col h-full min-h-0">
+    <div className="relative flex-1 flex flex-col h-full min-h-0">
       {/* Header */}
       <div className={`flex-shrink-0 px-4 py-2 flex justify-between items-center ${t.header(isDark)}`}>
         {/* GhostLink brand in header */}
@@ -615,57 +623,62 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         </div>
       </div>
 
-      {/* Messages — flex-1 min-h-0 is the key: lets this div shrink so the input bar is never pushed off screen */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 chat-messages">
-
-        {/* ── Session-ended security banner ── */}
-        <AnimatePresence>
-          {sessionEnded && (
-            <motion.div
-              initial={{ opacity: 0, y: -12, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.97 }}
-              transition={{ duration: 0.25 }}
+      {/* ── Floating session-ended toast (top-center, outside message flow) ── */}
+      <AnimatePresence>
+        {sessionEnded && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'absolute',
+              top: '14px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 200,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '9px 16px',
+              borderRadius: '999px',
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              maxWidth: 'calc(100% - 32px)',
+              background: isDark
+                ? 'rgba(15,15,35,0.92)'
+                : 'rgba(255,255,255,0.95)',
+              border: isDark
+                ? '1px solid rgba(239,68,68,0.4)'
+                : '1px solid rgba(239,68,68,0.3)',
+              color: isDark ? '#fca5a5' : '#dc2626',
+              boxShadow: isDark
+                ? '0 4px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(239,68,68,0.15)'
+                : '0 4px 20px rgba(0,0,0,0.12)',
+              backdropFilter: 'blur(16px)',
+            }}
+          >
+            <span>👻</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Session paused — reconnected automatically.
+            </span>
+            <button
+              onClick={clearSessionEnded}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 14px',
-                borderRadius: '14px',
-                marginBottom: '4px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                background: isDark
-                  ? 'rgba(239,68,68,0.12)'
-                  : 'rgba(239,68,68,0.08)',
-                border: isDark
-                  ? '1px solid rgba(239,68,68,0.35)'
-                  : '1px solid rgba(239,68,68,0.25)',
-                color: isDark ? '#fca5a5' : '#dc2626',
-                backdropFilter: 'blur(8px)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.85rem', color: 'inherit', opacity: 0.65,
+                padding: '0 2px', lineHeight: 1, flexShrink: 0,
               }}
-            >
-              <span style={{ fontSize: '1rem' }}>👻</span>
-              <span style={{ flex: 1 }}>
-                Session paused — you left the app. You have been reconnected.
-              </span>
-              <button
-                onClick={clearSessionEnded}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.9rem',
-                  color: 'inherit',
-                  opacity: 0.7,
-                  padding: '0 2px',
-                  lineHeight: 1,
-                }}
-                title="Dismiss"
-              >✕</button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              title="Dismiss"
+            >✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Messages — flex-1 min-h-0 is the key */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 chat-messages">
+        {/* Session-ended banner REMOVED from here — now a floating toast above */}
         {messageList.map((msg, index) => (
           <MessageItem 
             key={msg.msgId || index}
@@ -705,13 +718,20 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
           type="file"
           accept="image/*,video/*"
           style={{ display: 'none' }}
-          onChange={(e) => sendMultimedia(e.target.files[0])}
+          onChange={(e) => {
+            // File selected — reset the picker guard first
+            if (isPickingFile) isPickingFile.current = false;
+            sendMultimedia(e.target.files[0]);
+          }}
         />
 
         <div className={`flex items-center gap-2 rounded-full p-1.5 border transition-all shadow-inner ${isDark ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50' : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'}`}>
-          {/* Attachment button */}
+          {/* Attachment button — sets isPickingFile guard before opening picker */}
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => {
+              if (isPickingFile) isPickingFile.current = true;
+              fileInputRef.current?.click();
+            }}
             title="Share image or video"
             className={`p-2 rounded-full transition-all flex-shrink-0 ${
               isDark

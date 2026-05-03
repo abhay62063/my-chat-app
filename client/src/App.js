@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { StarField } from './components/StarField';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -27,6 +27,10 @@ export default function App() {
   const [members, setMembers] = useState([]);
   // Banner shown when the session was ended by the Page Visibility guard
   const [sessionEnded, setSessionEnded] = useState(false);
+  // Ref set to true while the OS file-picker dialog is open.
+  // The file picker backgrounds the page (visibilityState → 'hidden') on
+  // Android and iOS, so we must NOT disconnect the socket during that window.
+  const isPickingFile = useRef(false);
 
   // ── Theme Toggle ────────────────────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('chat-theme') || 'light');
@@ -67,7 +71,10 @@ export default function App() {
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
-        // User left — cut the connection so peers see them leave cleanly
+        // Skip disconnect if the user is just opening the file picker.
+        // On Android/iOS the file picker backgrounds the page briefly.
+        if (isPickingFile.current) return;
+        // User genuinely left — cut the connection so peers see them leave cleanly
         if (socket.connected) socket.disconnect();
       } else {
         // User returned — reconnect and re-join if they were in a room
@@ -180,6 +187,7 @@ export default function App() {
             toggleTheme={toggleTheme}
             sessionEnded={sessionEnded}
             clearSessionEnded={() => setSessionEnded(false)}
+            isPickingFile={isPickingFile}
           />
         </div>
       </div>
