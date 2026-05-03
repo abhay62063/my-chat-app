@@ -35,7 +35,7 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  maxHttpBufferSize: 1e8 // Set to ~100MB to allow large file transfers
+  maxHttpBufferSize: 5e7 // Set to 50MB to allow large file transfers without crashing
 });
 
 // Room users ko track karne ke liye object

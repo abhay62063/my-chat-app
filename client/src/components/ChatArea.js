@@ -252,10 +252,10 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const isInitialLoad = useRef(true); // Track first history load vs live messages
   const isDark = theme === 'dark';
 
-  // Auto-dismiss the session-ended toast after 3 seconds
+  // Auto-dismiss the session-ended toast after 4 seconds
   useEffect(() => {
     if (!sessionEnded) return;
-    const t = setTimeout(() => clearSessionEnded(), 3000);
+    const t = setTimeout(() => clearSessionEnded(), 4000);
     return () => clearTimeout(t);
   }, [sessionEnded, clearSessionEnded]);
 
@@ -656,12 +656,12 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             transition={{ duration: 0.22 }}
             style={{
               position: 'fixed',
-              top: '20px',
+              top: '10px',
               left: '50%',
               transform: 'translateX(-50%)',
-              zIndex: 9999,
-              width: '90%',
-              maxWidth: '400px',
+              zIndex: 10000,
+              width: '95%',
+              maxWidth: '350px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -670,18 +670,14 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               borderRadius: '12px',
               fontSize: '0.8rem',
               fontWeight: 600,
-              background: isDark
-                ? 'rgba(15,15,35,0.75)'
-                : 'rgba(255,255,255,0.85)',
-              border: isDark
-                ? '1px solid rgba(255,255,255,0.1)'
-                : '1px solid rgba(0,0,0,0.05)',
+              background: 'rgba(255, 0, 0, 0.1)',
+              border: '1px solid rgba(255, 0, 0, 0.2)',
               color: isDark ? '#fca5a5' : '#dc2626',
               boxShadow: isDark
                 ? '0 8px 32px rgba(0,0,0,0.5)'
                 : '0 8px 32px rgba(0,0,0,0.1)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
@@ -699,6 +695,25 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               }}
               title="Dismiss"
             >✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Full-screen Sending Overlay ── */}
+      <AnimatePresence>
+        {isSending && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[20000] flex flex-col items-center justify-center backdrop-blur-md bg-black/40"
+          >
+            <div className="bg-white/10 p-6 rounded-2xl flex flex-col items-center gap-4 border border-white/20 shadow-2xl backdrop-blur-xl">
+              <Loader2 className="w-10 h-10 animate-spin text-cyan-400" />
+              <p className="text-white font-semibold tracking-wide text-sm">
+                Sending media... Please wait.
+              </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
