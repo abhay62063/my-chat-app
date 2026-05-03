@@ -91,7 +91,9 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         <video
           src={msg.mediaBase64}
           controls
-          style={{ display: 'block', width: '100%', maxHeight: '240px', objectFit: 'cover' }}
+          playsInline           // Essential for iOS inline playback
+          muted={false}         // Unmuted by default so sound works on first play
+          style={{ display: 'block', width: '100%', maxHeight: '280px', objectFit: 'contain', background: '#000' }}
         />
       ) : (
         <img
@@ -262,6 +264,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [fileSizeError, setFileSizeError] = useState(false); // File too large alert
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
@@ -319,9 +322,21 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     socket.emit("stop_typing", { room });
   };
 
-  // ── Send Multimedia (image / video via Base64) ───────────────────────────
+  // ── Send Multimedia (image / video via Base64) — 100MB limit ───────────────
   const sendMultimedia = async (file) => {
     if (!file) return;
+
+    // ── 100MB hard limit ─────────────────────────────────────────────────────
+    const MAX_BYTES = 100 * 1024 * 1024; // 100MB
+    if (file.size > MAX_BYTES) {
+      setFileSizeError(true);
+      // Auto-dismiss after 4 s
+      setTimeout(() => setFileSizeError(false), 4000);
+      if (isPickingFile) isPickingFile.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setIsSending(true);
 
     try {
@@ -329,30 +344,31 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       const isVideo = file.type.startsWith('video/');
       const mediaType = isVideo ? 'video' : 'image';
 
-      // Compress image if larger than 2MB
+      // Compress images larger than 2MB (skip for video — already encoded)
       if (!isVideo && file.size > 2 * 1024 * 1024) {
-        const options = {
-          maxSizeMB: 2,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-        };
+        const options = { maxSizeMB: 2, maxWidthOrHeight: 1920, useWebWorker: true };
         processedFile = await imageCompression(file, options);
       }
 
       const reader = new FileReader();
+
       reader.onload = () => {
-        const base64 = reader.result;  // data:image/...;base64,...
+        const base64 = reader.result;
         const msgId = Date.now().toString() + Math.random().toString(36).substring(2);
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
         const payload = { msgId, room, author: username, mediaBase64: base64, mediaType, time };
 
-        // Emit to server (server saves placeholder, relays Base64 to peers)
-        socket.emit('send_multimedia', payload);
+        // Keep overlay visible until AFTER the full payload is handed to the socket buffer
+        socket.emit('send_multimedia', payload, () => {
+          // Acknowledgement callback fires once the server receives the entire buffer
+          setIsSending(false);
+        });
+
+        // If server doesn't ack (e.g. no callback wired), fall back after 30 s
+        setTimeout(() => setIsSending(false), 30000);
 
         // Show immediately in the sender's own chat
         setMessageList((list) => [...list, { ...payload, type: mediaType }]);
-        setIsSending(false);
       };
 
       reader.onerror = () => setIsSending(false);
@@ -361,7 +377,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       console.error("Error processing file:", error);
       setIsSending(false);
     } finally {
-      // Reset file-picker guard and input value so same file can be re-picked
+      // Reset file-picker guard and input so the same file can be re-picked
       if (isPickingFile) isPickingFile.current = false;
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -669,6 +685,57 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── File-size error toast ── */}
+      <AnimatePresence>
+        {fileSizeError && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'fixed',
+              top: '10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10001,
+              width: '95%',
+              maxWidth: '360px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              padding: '13px 16px',
+              borderRadius: '12px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#fca5a5',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <span>⚠️</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                File too large! Max limit is 100MB.
+              </span>
+            </div>
+            <button
+              onClick={() => setFileSizeError(false)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.9rem', color: 'inherit', opacity: 0.7,
+                padding: '0 2px', lineHeight: 1, flexShrink: 0,
+              }}
+              title="Dismiss"
+            >✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Floating session-ended toast (top-center, outside message flow) ── */}
       <AnimatePresence>

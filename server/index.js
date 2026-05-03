@@ -35,7 +35,7 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  maxHttpBufferSize: 5e7 // 50MB — allows large camera photos/videos
+  maxHttpBufferSize: 1e8 // 100MB — supports large video clips and high-res camera photos
 });
 
 // ── Room tracking ─────────────────────────────────────────────────────────────
