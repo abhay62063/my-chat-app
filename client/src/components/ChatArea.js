@@ -1,19 +1,84 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff, RefreshCw, WifiOff } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 import imageCompression from 'browser-image-compression';
+
+// ── Encryption key persistence helpers ────────────────────────────────────────
+// Keys are stored per-room so network switches (WiFi → Mobile) don't lose them.
+const ENC_KEY_PREFIX = 'ghostlink_enc_key_';
+const DEC_ERR_PREFIX = 'ghostlink_dec_err_';
+
+const saveKeyToStorage = (room, password) => {
+  try { localStorage.setItem(ENC_KEY_PREFIX + room, password); } catch {}
+};
+
+const loadKeyFromStorage = (room) => {
+  try { return localStorage.getItem(ENC_KEY_PREFIX + room) || null; } catch { return null; }
+};
+
+const clearKeyFromStorage = (room) => {
+  try {
+    localStorage.removeItem(ENC_KEY_PREFIX + room);
+    localStorage.removeItem(DEC_ERR_PREFIX + room);
+    console.warn('[GhostLink] Corrupted key cleared for room:', room);
+  } catch {}
+};
+
+const getDecryptErrorCount = (room) => {
+  try { return parseInt(localStorage.getItem(DEC_ERR_PREFIX + room) || '0', 10); } catch { return 0; }
+};
+
+const bumpDecryptErrorCount = (room) => {
+  try {
+    const n = getDecryptErrorCount(room) + 1;
+    localStorage.setItem(DEC_ERR_PREFIX + room, String(n));
+    return n;
+  } catch { return 1; }
+};
+
+const resetDecryptErrorCount = (room) => {
+  try { localStorage.removeItem(DEC_ERR_PREFIX + room); } catch {}
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const encrypt = (text, key) => CryptoJS.AES.encrypt(text, key).toString();
 
-const decrypt = (ciphertext, key) => {
+// Returns { text, ok } — never throws. Falls back to stored key, then reports failure.
+const tryDecrypt = (ciphertext, primaryKey, room) => {
+  // 1️⃣ Try with the key the user entered in this session
   try {
-    const bytes = CryptoJS.AES.decrypt(ciphertext, key);
-    return bytes.toString(CryptoJS.enc.Utf8) || '[Encrypted]';
-  } catch {
-    return '[Encrypted]';
+    if (primaryKey) {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, primaryKey);
+      const plain = bytes.toString(CryptoJS.enc.Utf8);
+      if (plain) { resetDecryptErrorCount(room); return { text: plain, ok: true }; }
+    }
+  } catch {}
+
+  // 2️⃣ Try re-syncing with the persisted key (survives WiFi → Mobile switches)
+  try {
+    const storedKey = loadKeyFromStorage(room);
+    if (storedKey && storedKey !== primaryKey) {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, storedKey);
+      const plain = bytes.toString(CryptoJS.enc.Utf8);
+      if (plain) {
+        console.warn('[GhostLink] Decrypted using stored key — session key may have drifted.');
+        resetDecryptErrorCount(room);
+        return { text: plain, ok: true };
+      }
+    }
+  } catch {}
+
+  // 3️⃣ Both keys failed — count the error
+  const errCount = bumpDecryptErrorCount(room);
+  console.error(`[GhostLink] Decrypt failed (attempt ${errCount}/3) for room: ${room}`);
+
+  // 4️⃣ After 3 failures, wipe the corrupted stored key automatically
+  if (errCount >= 3) {
+    clearKeyFromStorage(room);
   }
+
+  return { text: null, ok: false };
 };
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -321,12 +386,37 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [fileSizeError, setFileSizeError] = useState(false); // File too large alert
+  const [fileSizeError, setFileSizeError] = useState(false);     // File too large alert
+  const [decryptError, setDecryptError] = useState(false);       // Decryption failure toast
+  const [isRepairing, setIsRepairing] = useState(false);         // Repair Connection spinner
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
   const isInitialLoad = useRef(true); // Track first history load vs live messages
+  // Always-fresh ref to the current password so socket callbacks never see stale closures
+  const passwordRef = useRef(password);
+  useEffect(() => { passwordRef.current = password; }, [password]);
+  // Always-fresh ref to the current room for the same reason
+  const roomRef = useRef(room);
+  useEffect(() => { roomRef.current = room; }, [room]);
   const isDark = theme === 'dark';
+
+  // ── Persist key to localStorage whenever it changes ────────────────────────
+  // This ensures the key survives network switches (WiFi → Mobile Data).
+  useEffect(() => {
+    if (room && password) saveKeyToStorage(room, password);
+  }, [room, password]);
+
+  // ── Stable decrypt wrapper that always uses the current password ref ────────
+  const decryptMsg = useCallback((ciphertext) => {
+    const result = tryDecrypt(ciphertext, passwordRef.current, roomRef.current);
+    if (!result.ok) {
+      setDecryptError(true);
+      // Auto-dismiss after 5 s
+      setTimeout(() => setDecryptError(false), 5000);
+    }
+    return result.text || '🔒 Message could not be decrypted. Try refreshing.';
+  }, []);  // stable — reads from refs, never stale
 
   // Auto-dismiss the session-ended toast after 4 seconds
   useEffect(() => {
@@ -468,9 +558,16 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         setMessageList([]);
         return;
       }
+      // Use passwordRef (always fresh) so a stale closure can't cause [Encrypted]
+      const currentKey = passwordRef.current || loadKeyFromStorage(roomRef.current);
       const decrypted = rawMessages.map((msg) => {
-        const plainText = decrypt(msg.message, password);
-        console.log(`[DECRYPT] author=${msg.author} | plain=${plainText.slice(0, 30)}`);
+        if (!msg.message) return { ...msg, message: '' };
+        const result = tryDecrypt(msg.message, currentKey, roomRef.current);
+        const plainText = result.ok
+          ? result.text
+          : '🔒 Message could not be decrypted. Try refreshing.';
+        console.log(`[DECRYPT] author=${msg.author} | ok=${result.ok} | preview=${plainText.slice(0, 30)}`);
+        if (!result.ok) setDecryptError(true);
         return { ...msg, message: plainText };
       });
       setMessageList(decrypted);
@@ -492,8 +589,9 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   // ── Socket Listeners ──────────────────────────────────────────────────────
   useEffect(() => {
     // Incoming message from another user: decrypt before display
+    // Uses decryptMsg (stable ref-based wrapper) so the closure never goes stale.
     socket.on("receive_message", (data) => {
-      setMessageList((list) => [...list, { ...data, message: decrypt(data.message, password) }]);
+      setMessageList((list) => [...list, { ...data, message: decryptMsg(data.message) }]);
     });
 
     // System join/leave notifications — no decryption needed, never saved to DB
@@ -534,7 +632,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       socket.off("hide_typing");
       socket.off("chat_cleared");
     };
-  }, [socket, username, password]);
+  }, [socket, username, decryptMsg]);
 
   // ── Join Screen ───────────────────────────────────────────────────────────
   if (!showChat) {
@@ -700,7 +798,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.92, y: -8 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-10 w-52 rounded-2xl overflow-hidden z-50 shadow-2xl"
+                className="absolute right-0 top-10 w-56 rounded-2xl overflow-hidden z-50 shadow-2xl"
                 style={isDark
                   ? { background: 'rgba(10,10,30,0.92)', backdropFilter: 'blur(20px)', border: '1px solid rgba(34,211,238,0.2)', boxShadow: '0 0 30px rgba(34,211,238,0.1)' }
                   : { background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }
@@ -725,6 +823,57 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 {/* Divider */}
                 <div style={{ height: '1px', background: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9' }} />
 
+                {/* ── Repair Connection ── clears stuck keys and re-joins room */}
+                <button
+                  id="repair-connection-btn"
+                  disabled={isRepairing}
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    setIsRepairing(true);
+                    // 1. Wipe any corrupted stored key
+                    clearKeyFromStorage(room);
+                    // 2. Re-save the current session key fresh
+                    if (room && password) saveKeyToStorage(room, password);
+                    // 3. Clear local message list so stale [Encrypted] bubbles are gone
+                    setMessageList([]);
+                    // 4. Re-emit join_room to pull fresh history & resync session
+                    hasJoined.current = false; // allow re-join
+                    isInitialLoad.current = true;
+                    await new Promise(r => setTimeout(r, 300)); // small settle delay
+                    // Re-register history listener and re-join
+                    const handleHistory = (rawMessages) => {
+                      const currentKey = passwordRef.current || loadKeyFromStorage(roomRef.current);
+                      const decrypted = rawMessages.map((msg) => {
+                        if (!msg.message) return { ...msg, message: '' };
+                        const result = tryDecrypt(msg.message, currentKey, roomRef.current);
+                        return { ...msg, message: result.ok ? result.text : '🔒 Message could not be decrypted. Try refreshing.' };
+                      });
+                      setMessageList(decrypted);
+                      socket.off('message_history', handleHistory);
+                      setIsRepairing(false);
+                    };
+                    socket.on('message_history', handleHistory);
+                    socket.emit('join_room', { room, username });
+                    hasJoined.current = true;
+                    // Safety timeout — stop spinner after 6 s even if no response
+                    setTimeout(() => setIsRepairing(false), 6000);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all ${
+                    isDark
+                      ? 'text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-50'
+                      : 'text-blue-600 hover:bg-blue-50 disabled:opacity-50'
+                  }`}
+                >
+                  {isRepairing
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <RefreshCw className="w-4 h-4" />
+                  }
+                  {isRepairing ? 'Repairing…' : 'Repair Connection'}
+                </button>
+
+                {/* Divider */}
+                <div style={{ height: '1px', background: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9' }} />
+
                 {/* Clear Chat Item */}
                 <button
                   onClick={() => { setMessageList([]); setMenuOpen(false); }}
@@ -742,6 +891,57 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
           </AnimatePresence>
         </div>
       </div>
+
+      {/* ── Decryption error toast ── */}
+      <AnimatePresence>
+        {decryptError && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'fixed',
+              top: '10px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 10002,
+              width: '95%',
+              maxWidth: '380px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              padding: '13px 16px',
+              borderRadius: '12px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              background: 'rgba(234, 179, 8, 0.12)',
+              border: '1px solid rgba(234, 179, 8, 0.4)',
+              color: isDark ? '#fde68a' : '#92400e',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <WifiOff size={15} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Message could not be decrypted. Try refreshing or use Repair Connection.
+              </span>
+            </div>
+            <button
+              onClick={() => setDecryptError(false)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.9rem', color: 'inherit', opacity: 0.7,
+                padding: '0 2px', lineHeight: 1, flexShrink: 0,
+              }}
+              title="Dismiss"
+            >✕</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── File-size error toast ── */}
       <AnimatePresence>
