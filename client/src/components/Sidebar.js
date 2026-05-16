@@ -1,14 +1,16 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { LogOut, X, Shield } from 'lucide-react';
 
 export function Sidebar({ isOpen, onClose, isMobile, room, username, members, theme, leaveRoom }) {
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const isDark = theme === 'dark';
   const currentRoomId = room || "No Room Joined";
   const onlineCount = members ? members.length : 0;
 
   const sidebarContent = (
     <div
-      className="h-full flex flex-col border-r"
+      className="h-full flex flex-col border-r relative"
       style={isDark
         ? { background: 'rgba(10,10,30,0.92)', backdropFilter: 'blur(24px)', borderColor: 'rgba(255,255,255,0.1)' }
         : { background: '#ffffff', borderColor: '#e2e8f0' }
@@ -115,7 +117,7 @@ export function Sidebar({ isOpen, onClose, isMobile, room, username, members, th
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={leaveRoom}
+          onClick={() => setShowLeaveModal(true)}
           className="w-full py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}
         >
@@ -123,6 +125,131 @@ export function Sidebar({ isOpen, onClose, isMobile, room, username, members, th
           Leave Room
         </motion.button>
       </div>
+
+      {/* ── Leave Room Confirmation Modal ── */}
+      <AnimatePresence>
+        {showLeaveModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 60,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              padding: '20px',
+            }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowLeaveModal(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.88, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: 24 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                width: '100%', maxWidth: '340px',
+                borderRadius: '24px',
+                padding: '28px 24px 22px',
+                background: isDark
+                  ? 'rgba(8, 10, 28, 0.88)'
+                  : 'rgba(255, 255, 255, 0.92)',
+                border: isDark
+                  ? '1px solid rgba(255,255,255,0.1)'
+                  : '1px solid rgba(239,68,68,0.15)',
+                boxShadow: isDark
+                  ? '0 20px 60px rgba(0,0,0,0.6)'
+                  : '0 20px 60px rgba(0,0,0,0.15)',
+              }}
+            >
+              {/* Title */}
+              <h2 style={{
+                textAlign: 'center',
+                fontSize: '1.15rem',
+                fontWeight: 800,
+                letterSpacing: '-0.01em',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                marginBottom: '10px',
+              }}>
+                Leave Room?
+              </h2>
+
+              {/* Description */}
+              <p style={{
+                textAlign: 'center',
+                fontSize: '0.82rem',
+                lineHeight: 1.6,
+                color: isDark ? 'rgba(203,213,225,0.7)' : 'rgba(51,65,85,0.7)',
+                marginBottom: '22px',
+                padding: '0 4px',
+              }}>
+                Are you sure you want to leave this chat room? Your ephemeral session will end.
+              </p>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {/* Cancel */}
+                <button
+                  onClick={() => setShowLeaveModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: '14px',
+                    border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #e2e8f0',
+                    background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(241,245,249,0.9)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.01em',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(241,245,249,0.9)';
+                  }}
+                >
+                  Cancel
+                </button>
+
+                {/* Yes, Leave */}
+                <button
+                  onClick={() => {
+                    setShowLeaveModal(false);
+                    leaveRoom(); // This executes the manual_leave emit and clears state
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: '14px',
+                    border: 'none',
+                    background: isDark ? 'linear-gradient(135deg, #f87171, #ef4444)' : 'linear-gradient(135deg, #fb7185, #f43f5e)',
+                    color: '#fff',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.01em',
+                    boxShadow: isDark ? '0 4px 18px rgba(239,68,68,0.25)' : '0 4px 18px rgba(244,63,94,0.3)',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Yes, Leave
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 
