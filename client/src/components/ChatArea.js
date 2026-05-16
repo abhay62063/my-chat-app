@@ -761,6 +761,9 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     // Clear chat: UI only, DB untouched
     socket.on("chat_cleared", () => setMessageList([]));
 
+    // Permanent DB wipe confirmed by server — clear all peers' screens in real-time
+    socket.on("room_chat_cleared", () => setMessageList([]));
+
     return () => {
       socket.off("receive_message");
       socket.off("receive_notification");
@@ -769,6 +772,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       socket.off("display_typing");
       socket.off("hide_typing");
       socket.off("chat_cleared");
+      socket.off("room_chat_cleared");
     };
   }, [socket, username, decryptMsg]);
 
@@ -1154,13 +1158,13 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
 
                 {/* Yes, Delete */}
                 <button
-                  onClick={() => {
-                    // 1. Clear local message list
+                  onClick={async () => {
+                    // 1. Clear local message list immediately
                     setMessageList([]);
                     // 2. Clear stored encryption keys & error counters for this room
                     clearKeyFromStorage(room);
-                    // 3. Emit server event to clear UI for all peers in room
-                    socket.emit('clear_chat', room);
+                    // 3. Emit permanent DB wipe + real-time broadcast to all peers
+                    socket.emit('clear_room_database', { room, username });
                     // 4. Close modal, show success toast
                     setShowClearModal(false);
                     setClearSuccess(true);

@@ -160,9 +160,22 @@ io.on("connection", (socket) => {
     socket.to(data.room).emit("hide_typing");
   });
 
-  // ── Clear Chat (UI only) ──────────────────────────────────────────────────
+  // ── Clear Chat (UI only — no DB write) ───────────────────────────────────
   socket.on("clear_chat", (room) => {
     io.in(room).emit("chat_cleared");
+  });
+
+  // ── Clear Room Database (permanent wipe + real-time broadcast) ────────────
+  socket.on("clear_room_database", async ({ room, username }) => {
+    try {
+      const result = await Message.deleteMany({ room });
+      console.log(`🗑️  ${username} wiped ${result.deletedCount} messages from room '${room}'`);
+    } catch (err) {
+      console.error("❌ Error wiping room messages:", err);
+    }
+    // Broadcast to ALL sockets in the room (including the sender) so every
+    // connected device clears its screen instantly
+    io.in(room).emit("room_chat_cleared");
   });
 
   // ── Message Seen ──────────────────────────────────────────────────────────
