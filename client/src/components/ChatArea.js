@@ -389,6 +389,63 @@ const MessageItem = ({ msg, username, isDark, socket, room, onReply }) => {
     );
   }
 
+  // ── System Action (permanent archived event — e.g. 'chat cleared') ─────────
+  if (msg.type === 'system_action') {
+    return (
+      <div className="flex justify-center my-4 w-full">
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '4px',
+            width: '100%',
+            maxWidth: '380px',
+          }}
+        >
+          {/* Amber pill */}
+          <div
+            style={{
+              fontSize: '0.63rem',
+              fontWeight: 600,
+              letterSpacing: '0.07em',
+              textTransform: 'uppercase',
+              color: isDark ? 'rgba(251, 191, 36, 0.9)' : 'rgba(180, 120, 0, 0.85)',
+              background: isDark
+                ? 'linear-gradient(90deg, transparent, rgba(251,191,36,0.12), transparent)'
+                : 'linear-gradient(90deg, transparent, rgba(251,191,36,0.15), transparent)',
+              borderTop: `1px solid ${isDark ? 'rgba(251,191,36,0.3)' : 'rgba(251,191,36,0.35)'}`,
+              borderBottom: `1px solid ${isDark ? 'rgba(251,191,36,0.3)' : 'rgba(251,191,36,0.35)'}`,
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              padding: '6px 20px',
+              width: '100%',
+              textAlign: 'center',
+              userSelect: 'none',
+              boxShadow: isDark
+                ? '0 4px 20px rgba(251,191,36,0.08)'
+                : '0 4px 20px rgba(251,191,36,0.1)',
+            }}
+          >
+            🗑️ {msg.message}
+          </div>
+          {/* Timestamp pinned below the pill */}
+          <span
+            style={{
+              fontSize: '0.6rem',
+              color: isDark ? 'rgba(251,191,36,0.55)' : 'rgba(180,120,0,0.55)',
+              letterSpacing: '0.04em',
+              userSelect: 'none',
+            }}
+          >
+            {msg.time}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
 
   // ── Media messages (image / video) ────────────────────────────────────────
   if (msg.type === 'image' || msg.type === 'video') {
@@ -761,8 +818,10 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     // Clear chat: UI only, DB untouched
     socket.on("chat_cleared", () => setMessageList([]));
 
-    // Permanent DB wipe confirmed by server — clear all peers' screens in real-time
-    socket.on("room_chat_cleared", () => setMessageList([]));
+    // Permanent DB wipe — clears all peers' screens and injects the pinned system notice
+    socket.on("room_chat_cleared_with_notice", (systemNotice) => {
+      setMessageList([systemNotice]);
+    });
 
     return () => {
       socket.off("receive_message");
@@ -772,7 +831,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       socket.off("display_typing");
       socket.off("hide_typing");
       socket.off("chat_cleared");
-      socket.off("room_chat_cleared");
+      socket.off("room_chat_cleared_with_notice");
     };
   }, [socket, username, decryptMsg]);
 

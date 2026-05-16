@@ -173,9 +173,32 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.error("❌ Error wiping room messages:", err);
     }
-    // Broadcast to ALL sockets in the room (including the sender) so every
-    // connected device clears its screen instantly
-    io.in(room).emit("room_chat_cleared");
+
+    // Build the permanent system action notification
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const systemMsgId = `sys_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    const systemNotice = {
+      msgId: systemMsgId,
+      room,
+      author: 'System',
+      message: `${username} deleted the chat messages`,
+      time: timeStr,
+      type: 'system_action',   // persistent archived action pill
+      seenBy: [],
+    };
+
+    // Persist to MongoDB so it survives page reloads and future logins
+    try {
+      await new Message(systemNotice).save();
+      console.log(`📌 System action notice saved for room '${room}'`);
+    } catch (err) {
+      console.error("❌ Error saving system notice:", err);
+    }
+
+    // Broadcast clear + the notice object to every peer in the room
+    io.in(room).emit("room_chat_cleared_with_notice", systemNotice);
   });
 
   // ── Message Seen ──────────────────────────────────────────────────────────
