@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff, RefreshCw, WifiOff, Reply, X } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff, RefreshCw, WifiOff, Reply, X, ShieldAlert, AlertTriangle } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 import imageCompression from 'browser-image-compression';
 import { useSwipeable } from 'react-swipeable';
@@ -518,6 +518,8 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [decryptError, setDecryptError] = useState(false);       // Decryption failure toast
   const [isRepairing, setIsRepairing] = useState(false);         // Repair Connection spinner
   const [replyingTo, setReplyingTo] = useState(null);             // { msgId, sender, text } | null
+  const [showClearModal, setShowClearModal] = useState(false);    // Clear All Data confirmation
+  const [clearSuccess, setClearSuccess] = useState(false);        // Post-clear success toast
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
@@ -1010,7 +1012,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                 {/* Divider */}
                 <div style={{ height: '1px', background: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9' }} />
 
-                {/* Clear Chat Item */}
+                {/* Clear Chat (UI only) */}
                 <button
                   onClick={() => { setMessageList([]); setMenuOpen(false); }}
                   className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all ${
@@ -1022,13 +1024,209 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
                   <Trash2 className="w-4 h-4" />
                   Clear Chat (UI only)
                 </button>
+
+                {/* Divider */}
+                <div style={{ height: '1px', background: isDark ? 'rgba(255,255,255,0.08)' : '#f1f5f9' }} />
+
+                {/* ── Clear All Data (destructive, needs confirmation) ── */}
+                <button
+                  onClick={() => { setMenuOpen(false); setShowClearModal(true); }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold transition-all ${
+                    isDark
+                      ? 'text-rose-400 hover:bg-rose-500/10'
+                      : 'text-rose-600 hover:bg-rose-50'
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  Clear All Data
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       </div>
 
-      {/* ── Decryption error toast ── */}
+      {/* ── Clear All Data — Confirmation Modal ───────────────────────────────── */}
+      <AnimatePresence>
+        {showClearModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 20000,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.55)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+              padding: '20px',
+            }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowClearModal(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.88, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: 24 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                width: '100%', maxWidth: '380px',
+                borderRadius: '24px',
+                padding: '28px 24px 22px',
+                background: isDark
+                  ? 'rgba(8, 10, 28, 0.88)'
+                  : 'rgba(255, 255, 255, 0.92)',
+                backdropFilter: 'blur(24px)',
+                WebkitBackdropFilter: 'blur(24px)',
+                border: isDark
+                  ? '1px solid rgba(239,68,68,0.25)'
+                  : '1px solid rgba(239,68,68,0.2)',
+                boxShadow: isDark
+                  ? '0 0 60px rgba(239,68,68,0.12), 0 20px 60px rgba(0,0,0,0.6)'
+                  : '0 20px 60px rgba(0,0,0,0.15)',
+              }}
+            >
+              {/* Icon */}
+              <div style={{
+                width: '52px', height: '52px', borderRadius: '50%',
+                background: 'rgba(239,68,68,0.12)',
+                border: '1.5px solid rgba(239,68,68,0.3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 0 20px rgba(239,68,68,0.15)',
+              }}>
+                <AlertTriangle size={24} style={{ color: '#ef4444' }} />
+              </div>
+
+              {/* Title */}
+              <h2 style={{
+                textAlign: 'center',
+                fontSize: '1.15rem',
+                fontWeight: 800,
+                letterSpacing: '-0.01em',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                marginBottom: '10px',
+              }}>
+                Are you sure?
+              </h2>
+
+              {/* Description */}
+              <p style={{
+                textAlign: 'center',
+                fontSize: '0.82rem',
+                lineHeight: 1.6,
+                color: isDark ? 'rgba(203,213,225,0.7)' : 'rgba(51,65,85,0.7)',
+                marginBottom: '22px',
+                padding: '0 4px',
+              }}>
+                Do you want to permanently delete all your chat data?
+                <br />
+                <span style={{ color: '#ef4444', fontWeight: 600 }}>This action cannot be undone.</span>
+              </p>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {/* No, Cancel */}
+                <button
+                  onClick={() => setShowClearModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: '14px',
+                    border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #e2e8f0',
+                    background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(241,245,249,0.9)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.01em',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(241,245,249,0.9)';
+                  }}
+                >
+                  No, Cancel
+                </button>
+
+                {/* Yes, Delete */}
+                <button
+                  onClick={() => {
+                    // 1. Clear local message list
+                    setMessageList([]);
+                    // 2. Clear stored encryption keys & error counters for this room
+                    clearKeyFromStorage(room);
+                    // 3. Emit server event to clear UI for all peers in room
+                    socket.emit('clear_chat', room);
+                    // 4. Close modal, show success toast
+                    setShowClearModal(false);
+                    setClearSuccess(true);
+                    setTimeout(() => setClearSuccess(false), 3500);
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: '14px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    color: '#fff',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.01em',
+                    boxShadow: '0 4px 18px rgba(239,68,68,0.35)',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.boxShadow = '0 6px 24px rgba(239,68,68,0.55)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.boxShadow = '0 4px 18px rgba(239,68,68,0.35)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Clear-success toast ───────────────────────────────────────── */}
+      <AnimatePresence>
+        {clearSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.22 }}
+            style={{
+              position: 'fixed', top: '10px', left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 20001, width: '95%', maxWidth: '340px',
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '12px 16px', borderRadius: '12px',
+              fontSize: '0.82rem', fontWeight: 600,
+              background: 'rgba(34,197,94,0.12)',
+              border: '1px solid rgba(34,197,94,0.35)',
+              color: isDark ? '#86efac' : '#15803d',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+            }}
+          >
+            <span style={{ fontSize: '1rem' }}>✅</span>
+            <span>All chat data cleared successfully.</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Decryption error toast ─────────────────────────────────────── */}
       <AnimatePresence>
         {decryptError && (
           <motion.div
