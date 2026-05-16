@@ -274,7 +274,17 @@ const SwipeableMessage = ({ msg, onReply, children }) => {
   const progress = Math.min(swipeX / THRESHOLD, 1);
 
   return (
-    <div {...handlers} style={{ position: 'relative', touchAction: 'pan-y', userSelect: 'none' }}>
+    <div
+      {...handlers}
+      style={{
+        position: 'relative',
+        touchAction: 'pan-y',
+        userSelect: 'none',
+        // ── KEY FIX: constrain width here so the bubble inside sizes correctly ──
+        maxWidth: '75%',
+        minWidth: 0,
+      }}
+    >
       {/* Neon reply icon revealed behind the bubble on swipe */}
       <div
         aria-hidden="true"
@@ -399,9 +409,17 @@ const MessageItem = ({ msg, username, isDark, socket, room, onReply }) => {
   return (
     <div id={msg.msgId} ref={ref} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <SwipeableMessage msg={msg} onReply={onReply}>
-        <div className={`max-w-[75%] p-3 rounded-2xl relative group ${isOwn ? t.ownBubble(isDark) : t.otherBubble(isDark)}`}>
+        {/*
+          Bubble: display:flex flex-direction:column so children stack vertically.
+          width is intentionally NOT set here — SwipeableMessage's maxWidth:75% acts
+          as the constraint. The bubble itself fills 100% of that wrapper.
+        */}
+        <div
+          className={`w-full p-3 rounded-2xl relative group ${isOwn ? t.ownBubble(isDark) : t.otherBubble(isDark)}`}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}
+        >
 
-          {/* ── Quoted reply bubble (shown when this message is a reply) ── */}
+          {/* ── Quoted reply bubble ── */}
           {msg.replyTo && (
             <div
               onClick={() => {
@@ -409,6 +427,7 @@ const MessageItem = ({ msg, username, isDark, socket, room, onReply }) => {
                 if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }}
               style={{
+                width: '100%',
                 marginBottom: '7px',
                 padding: '6px 10px',
                 borderRadius: '10px',
@@ -416,27 +435,64 @@ const MessageItem = ({ msg, username, isDark, socket, room, onReply }) => {
                 background: isDark ? 'rgba(34,211,238,0.08)' : 'rgba(59,130,246,0.09)',
                 cursor: 'pointer',
                 transition: 'background 0.15s',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                overflow: 'hidden',
+                boxSizing: 'border-box',
               }}
               onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(34,211,238,0.15)' : 'rgba(59,130,246,0.16)'}
               onMouseLeave={e => e.currentTarget.style.background = isDark ? 'rgba(34,211,238,0.08)' : 'rgba(59,130,246,0.09)'}
             >
-              <p style={{ fontSize: '0.62rem', fontWeight: 700, color: '#22d3ee', marginBottom: '2px', letterSpacing: '0.04em' }}>
+              <p style={{
+                display: 'block',
+                fontSize: '0.62rem', fontWeight: 700, color: '#22d3ee',
+                marginBottom: '2px', letterSpacing: '0.04em',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                width: '100%',
+              }}>
                 ↩ {msg.replyTo.sender}
               </p>
               <p style={{
+                display: 'block',
                 fontSize: '0.71rem',
                 color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.48)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px',
+                overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
               }}>
                 {msg.replyTo.text}
               </p>
             </div>
           )}
 
-          <p className={`text-[10px] font-bold mb-1 ${t.author(isDark)}`}>{msg.author}</p>
-          <p className="text-sm">{msg.message}</p>
+          {/* Author name */}
+          <p
+            className={`text-[10px] font-bold mb-1 ${t.author(isDark)}`}
+            style={{ alignSelf: 'flex-start' }}
+          >
+            {msg.author}
+          </p>
 
-          <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
+          {/* Message text — expands bubble width naturally before wrapping */}
+          <p
+            className="text-sm"
+            style={{
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+              whiteSpace: 'pre-wrap',
+              width: '100%',
+              margin: 0,
+            }}
+          >
+            {msg.message}
+          </p>
+
+          {/* Timestamp + read receipt — pinned to bottom-right */}
+          <div
+            className={`flex items-center gap-1 text-[9px] ${isDark ? 'text-gray-500' : 'text-slate-400'}`}
+            style={{ alignSelf: 'flex-end', marginTop: '4px' }}
+          >
             <span>{msg.time}</span>
             {isOwn && (
               <div title={seenTooltip} className="cursor-help">
