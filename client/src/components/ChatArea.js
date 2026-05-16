@@ -599,9 +599,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const decryptMsg = useCallback((ciphertext) => {
     const result = tryDecrypt(ciphertext, passwordRef.current, roomRef.current);
     if (!result.ok) {
-      setDecryptError(true);
-      // Auto-dismiss after 5 s
-      setTimeout(() => setDecryptError(false), 5000);
+      setDecryptError(true);  // useEffect below handles the 4-second auto-dismiss
     }
     return result.text || '🔒 Message could not be decrypted. Try refreshing.';
   }, []);  // stable — reads from refs, never stale
@@ -612,6 +610,25 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     const t = setTimeout(() => clearSessionEnded(), 4000);
     return () => clearTimeout(t);
   }, [sessionEnded, clearSessionEnded]);
+
+  // ── Auto-dismiss decrypt error toast after 4 s, with stacking protection ────
+  // Using a ref to cancel any previous timer before starting a new one so that
+  // rapid back-to-back decryption failures don't pile up timers.
+  const decryptErrorTimerRef = useRef(null);
+  useEffect(() => {
+    if (!decryptError) return;
+    // Cancel any existing timer
+    if (decryptErrorTimerRef.current) clearTimeout(decryptErrorTimerRef.current);
+    // Start a fresh 4-second countdown
+    decryptErrorTimerRef.current = setTimeout(() => {
+      setDecryptError(false);
+      decryptErrorTimerRef.current = null;
+    }, 4000);
+    // Cleanup: cancel if component unmounts or decryptError flips back to false
+    return () => {
+      if (decryptErrorTimerRef.current) clearTimeout(decryptErrorTimerRef.current);
+    };
+  }, [decryptError]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1269,16 +1286,16 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.22 }}
             style={{
-              position: 'fixed', top: '10px', left: '50%',
+              position: 'fixed', top: '16px', left: '50%',
               transform: 'translateX(-50%)',
-              zIndex: 20001, width: '95%', maxWidth: '340px',
+              zIndex: 20001, width: '90%', maxWidth: '340px',
               display: 'flex', alignItems: 'center', gap: '10px',
               padding: '12px 16px', borderRadius: '12px',
               fontSize: '0.82rem', fontWeight: 600,
               background: 'rgba(34,197,94,0.12)',
               border: '1px solid rgba(34,197,94,0.35)',
               color: isDark ? '#86efac' : '#15803d',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
               backdropFilter: 'blur(14px)',
               WebkitBackdropFilter: 'blur(14px)',
             }}
@@ -1289,7 +1306,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
         )}
       </AnimatePresence>
 
-      {/* ── Decryption error toast ─────────────────────────────────────── */}
+      {/* ── Decryption error toast ───────────────────────────────────── */}
       <AnimatePresence>
         {decryptError && (
           <motion.div
@@ -1299,50 +1316,52 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             transition={{ duration: 0.22 }}
             style={{
               position: 'fixed',
-              top: '10px',
+              top: '16px',
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 10002,
-              // ── FIX: 92% width on mobile so it never overflows the viewport
-              width: '92%',
-              maxWidth: '450px',
+              width: '90%',
+              maxWidth: '360px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
               gap: '10px',
-              padding: '10px 14px',
+              padding: '12px 16px',
               borderRadius: '12px',
-              // ── FIX: clamp scales from 11px on tiny screens to 13px on desktop
-              fontSize: 'clamp(0.69rem, 2.8vw, 0.82rem)',
+              fontSize: 'clamp(0.69rem, 3vw, 0.82rem)',
               fontWeight: 600,
-              background: 'rgba(234, 179, 8, 0.12)',
+              background: 'rgba(234, 179, 8, 0.14)',
               border: '1px solid rgba(234, 179, 8, 0.4)',
               color: isDark ? '#fde68a' : '#92400e',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
               backdropFilter: 'blur(14px)',
               WebkitBackdropFilter: 'blur(14px)',
+              whiteSpace: 'normal',
+              wordBreak: 'break-word',
             }}
           >
-            {/* Icon + wrapping text */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1, minWidth: 0 }}>
-              <WifiOff size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
-              {/* ── FIX: white-space:normal so text wraps on narrow screens */}
-              <span style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>
-                Message could not be decrypted. Try refreshing or use Repair Connection.
-              </span>
-            </div>
+            <WifiOff size={15} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0, lineHeight: 1.45 }}>
+              Message could not be decrypted. Try refreshing or use Repair Connection.
+            </span>
             <button
-              onClick={() => setDecryptError(false)}
+              onClick={() => {
+                if (decryptErrorTimerRef.current) clearTimeout(decryptErrorTimerRef.current);
+                setDecryptError(false);
+              }}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '0.9rem', color: 'inherit', opacity: 0.7,
-                padding: '0 2px', lineHeight: 1, flexShrink: 0,
+                color: 'inherit', opacity: 0.65,
+                padding: '2px', display: 'flex', alignItems: 'center',
+                flexShrink: 0,
               }}
               title="Dismiss"
-            >✕</button>
+            >
+              <X size={15} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
+
 
       {/* ── File-size error toast ── */}
       <AnimatePresence>
