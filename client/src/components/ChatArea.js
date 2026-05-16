@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff, RefreshCw, WifiOff } from 'lucide-react';
+import { Send, Lock, User, Hash, Trash2, MoreVertical, Sun, Moon, Check, CheckCheck, Paperclip, Download, Loader2, Eye, EyeOff, RefreshCw, WifiOff, Reply, X } from 'lucide-react';
 import CryptoJS from 'crypto-js';
 import imageCompression from 'browser-image-compression';
+import { useSwipeable } from 'react-swipeable';
 
 // ── Encryption key persistence helpers ────────────────────────────────────────
 // Keys are stored per-room so network switches (WiFi → Mobile) don't lose them.
@@ -156,8 +157,8 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         <video
           src={msg.mediaBase64}
           controls
-          playsInline           // Essential for iOS inline playback
-          muted={false}         // Unmuted by default so sound works on first play
+          playsInline
+          muted={false}
           style={{ display: 'block', width: '100%', maxHeight: '280px', objectFit: 'contain', background: '#000' }}
         />
       ) : (
@@ -170,7 +171,6 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
           alt="Shared image"
           style={{ display: 'block', width: '100%', maxHeight: '260px', objectFit: 'cover' }}
           onError={(e) => {
-            // Replace the broken img with a styled placeholder frame
             const el = e.currentTarget;
             el.style.display = 'none';
             const placeholder = document.createElement('div');
@@ -225,7 +225,6 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
         <span style={{ fontStyle: 'italic' }}>{isVideo ? '🎬 Video' : '🖼 Image'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           {msg.time}
-          {/* Read-receipt ticks — only visible on sender's side */}
           {isOwn && (
             <span title={seenTooltip} style={{ display: 'flex', alignItems: 'center', cursor: 'help' }}>
               {hasSeen
@@ -240,15 +239,92 @@ const MediaBubble = ({ msg, isOwn, isDark }) => {
   );
 };
 
+// ── SwipeableMessage: Right-swipe gesture wrapper for reply-on-swipe ─────────
+const SwipeableMessage = ({ msg, onReply, children }) => {
+  const [swipeX, setSwipeX] = useState(0);
+  const isSwipingRef = useRef(false);
+  const THRESHOLD = 55;
+
+  const handlers = useSwipeable({
+    onSwiping: (e) => {
+      if (e.dir !== 'Right') return;
+      isSwipingRef.current = true;
+      setSwipeX(Math.min(e.absX, 82));
+    },
+    onSwiped: (e) => {
+      if (isSwipingRef.current && e.absX >= THRESHOLD && e.dir === 'Right') {
+        if (navigator.vibrate) navigator.vibrate(40);
+        if (onReply) {
+          const replyText =
+            msg.type === 'image' ? '[Image]' :
+            msg.type === 'video' ? '[Video]' :
+            (msg.message || '');
+          onReply({ msgId: msg.msgId, sender: msg.author, text: replyText });
+        }
+      }
+      isSwipingRef.current = false;
+      setSwipeX(0);
+    },
+    trackTouch: true,
+    trackMouse: true,
+    preventScrollOnSwipe: true,
+    delta: 8,
+  });
+
+  const progress = Math.min(swipeX / THRESHOLD, 1);
+
+  return (
+    <div {...handlers} style={{ position: 'relative', touchAction: 'pan-y', userSelect: 'none' }}>
+      {/* Neon reply icon revealed behind the bubble on swipe */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          left: '2px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          opacity: progress,
+          transition: swipeX === 0 ? 'opacity 0.3s ease' : 'none',
+          color: '#22d3ee',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '30px',
+          height: '30px',
+          borderRadius: '50%',
+          background: `rgba(34,211,238,${(0.08 + progress * 0.12).toFixed(2)})`,
+          border: `1.5px solid rgba(34,211,238,${(0.2 + progress * 0.4).toFixed(2)})`,
+          boxShadow: progress > 0.4 ? `0 0 ${Math.round(10 + progress * 10)}px rgba(34,211,238,0.35)` : 'none',
+          pointerEvents: 'none',
+        }}
+      >
+        <Reply size={14} />
+      </div>
+
+      {/* Animated bubble slides right as user swipes */}
+      <div
+        style={{
+          transform: `translateX(${swipeX}px)`,
+          transition: swipeX === 0
+            ? 'transform 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            : 'none',
+          willChange: 'transform',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 // ── Message Item Component (Handles Visibility & Seen Status) ───────────────
-const MessageItem = ({ msg, username, isDark, socket, room }) => {
+const MessageItem = ({ msg, username, isDark, socket, room, onReply }) => {
   const isOwn = username === msg.author;
   const ref = useRef(null);
 
   // All hooks must be called unconditionally (Rules of Hooks).
-  // For notification messages the IntersectionObserver is a no-op.
   useEffect(() => {
-    if (msg.type === 'notification') return; // Skip for system messages
+    if (msg.type === 'notification') return;
     if (isOwn) return;
     if (msg.seenBy && msg.seenBy.includes(username)) return;
 
@@ -263,34 +339,23 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
     );
 
     if (ref.current) observer.observe(ref.current);
-
     return () => observer.disconnect();
   }, [isOwn, msg, username, socket, room]);
 
   // ── Notification (system) messages render as a premium centered pill ─────
   if (msg.type === 'notification') {
-    // Detect join vs leave to apply correct tint
     const isJoin = msg.message && (
-      msg.message.includes('joined') ||
-      msg.message.includes('materialized')
+      msg.message.includes('joined') || msg.message.includes('materialized')
     );
     const isLeave = msg.message && (
-      msg.message.includes('left') ||
-      msg.message.includes('vanished')
+      msg.message.includes('left') || msg.message.includes('vanished')
     );
 
-    // Rewrite raw server text into cinematic language
     let displayText = msg.message;
     if (isJoin) {
-      displayText = msg.message.replace(
-        /(.*) joined the room/,
-        (_, name) => `✦ ${name} materialized in the room`
-      );
+      displayText = msg.message.replace(/(.*) joined the room/, (_, name) => `✦ ${name} materialized in the room`);
     } else if (isLeave) {
-      displayText = msg.message.replace(
-        /(.*) left the room/,
-        (_, name) => `✦ ${name} vanished from the room`
-      );
+      displayText = msg.message.replace(/(.*) left the room/, (_, name) => `✦ ${name} vanished from the room`);
     }
 
     return (
@@ -298,42 +363,14 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
         <div
           className="relative overflow-hidden"
           style={{
-            fontSize: '0.65rem',
-            fontWeight: 500,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: isJoin
-              ? 'rgba(34, 211, 238, 0.95)'
-              : isLeave
-                ? 'rgba(252, 165, 165, 0.9)'
-                : 'rgba(255, 255, 255, 0.75)',
-            background: isJoin
-              ? 'linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent)'
-              : isLeave
-                ? 'linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.1), transparent)'
-                : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',
-            borderTop: isJoin
-              ? '1px solid rgba(34, 211, 238, 0.25)'
-              : isLeave
-                ? '1px solid rgba(239, 68, 68, 0.25)'
-                : '1px solid rgba(255, 255, 255, 0.1)',
-            borderBottom: isJoin
-              ? '1px solid rgba(34, 211, 238, 0.25)'
-              : isLeave
-                ? '1px solid rgba(239, 68, 68, 0.25)'
-                : '1px solid rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            padding: '6px 0',
-            width: '100%',
-            maxWidth: '350px',
-            textAlign: 'center',
-            userSelect: 'none',
-            boxShadow: isJoin
-              ? '0 4px 15px rgba(34,211,238,0.05)'
-              : isLeave
-                ? '0 4px 15px rgba(239,68,68,0.05)'
-                : 'none',
+            fontSize: '0.65rem', fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: isJoin ? 'rgba(34, 211, 238, 0.95)' : isLeave ? 'rgba(252, 165, 165, 0.9)' : 'rgba(255, 255, 255, 0.75)',
+            background: isJoin ? 'linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.1), transparent)' : isLeave ? 'linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.1), transparent)' : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',
+            borderTop: isJoin ? '1px solid rgba(34, 211, 238, 0.25)' : isLeave ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
+            borderBottom: isJoin ? '1px solid rgba(34, 211, 238, 0.25)' : isLeave ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            padding: '6px 0', width: '100%', maxWidth: '350px', textAlign: 'center', userSelect: 'none',
+            boxShadow: isJoin ? '0 4px 15px rgba(34,211,238,0.05)' : isLeave ? '0 4px 15px rgba(239,68,68,0.05)' : 'none',
           }}
         >
           {displayText}
@@ -342,38 +379,73 @@ const MessageItem = ({ msg, username, isDark, socket, room }) => {
     );
   }
 
+
   // ── Media messages (image / video) ────────────────────────────────────────
   if (msg.type === 'image' || msg.type === 'video') {
     return (
-      <div ref={ref} className={`flex flex-col gap-1 ${isOwn ? 'items-end' : 'items-start'}`}>
+      <div id={msg.msgId} ref={ref} className={`flex flex-col gap-1 ${isOwn ? 'items-end' : 'items-start'}`}>
         <p className={`text-[10px] font-bold px-1 ${t.author(isDark)}`}>{msg.author}</p>
-        <MediaBubble msg={msg} isOwn={isOwn} isDark={isDark} />
+        <SwipeableMessage msg={msg} onReply={onReply}>
+          <MediaBubble msg={msg} isOwn={isOwn} isDark={isDark} />
+        </SwipeableMessage>
       </div>
     );
   }
 
+  // ── Text messages ─────────────────────────────────────────────────────────
   const hasSeen = msg.seenBy && msg.seenBy.length > 0;
   const seenTooltip = hasSeen ? `Seen by: ${msg.seenBy.join(', ')}` : 'Sent';
 
   return (
-    <div ref={ref} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[75%] p-3 rounded-2xl relative group ${isOwn ? t.ownBubble(isDark) : t.otherBubble(isDark)}`}>
-        <p className={`text-[10px] font-bold mb-1 ${t.author(isDark)}`}>{msg.author}</p>
-        <p className="text-sm">{msg.message}</p>
-        
-        <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
-          <span>{msg.time}</span>
-          {isOwn && (
-            <div title={seenTooltip} className="cursor-help">
-              {hasSeen ? (
-                <CheckCheck className="w-3 h-3 text-blue-400" />
-              ) : (
-                <Check className="w-3 h-3 text-gray-400" />
-              )}
+    <div id={msg.msgId} ref={ref} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+      <SwipeableMessage msg={msg} onReply={onReply}>
+        <div className={`max-w-[75%] p-3 rounded-2xl relative group ${isOwn ? t.ownBubble(isDark) : t.otherBubble(isDark)}`}>
+
+          {/* ── Quoted reply bubble (shown when this message is a reply) ── */}
+          {msg.replyTo && (
+            <div
+              onClick={() => {
+                const el = document.getElementById(msg.replyTo.messageId);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              style={{
+                marginBottom: '7px',
+                padding: '6px 10px',
+                borderRadius: '10px',
+                borderLeft: '3px solid #22d3ee',
+                background: isDark ? 'rgba(34,211,238,0.08)' : 'rgba(59,130,246,0.09)',
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(34,211,238,0.15)' : 'rgba(59,130,246,0.16)'}
+              onMouseLeave={e => e.currentTarget.style.background = isDark ? 'rgba(34,211,238,0.08)' : 'rgba(59,130,246,0.09)'}
+            >
+              <p style={{ fontSize: '0.62rem', fontWeight: 700, color: '#22d3ee', marginBottom: '2px', letterSpacing: '0.04em' }}>
+                ↩ {msg.replyTo.sender}
+              </p>
+              <p style={{
+                fontSize: '0.71rem',
+                color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.48)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px',
+              }}>
+                {msg.replyTo.text}
+              </p>
             </div>
           )}
+
+          <p className={`text-[10px] font-bold mb-1 ${t.author(isDark)}`}>{msg.author}</p>
+          <p className="text-sm">{msg.message}</p>
+
+          <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>
+            <span>{msg.time}</span>
+            {isOwn && (
+              <div title={seenTooltip} className="cursor-help">
+                {hasSeen ? <CheckCheck className="w-3 h-3 text-blue-400" /> : <Check className="w-3 h-3 text-gray-400" />}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </SwipeableMessage>
     </div>
   );
 };
@@ -389,6 +461,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
   const [fileSizeError, setFileSizeError] = useState(false);     // File too large alert
   const [decryptError, setDecryptError] = useState(false);       // Decryption failure toast
   const [isRepairing, setIsRepairing] = useState(false);         // Repair Connection spinner
+  const [replyingTo, setReplyingTo] = useState(null);             // { msgId, sender, text } | null
   const messagesEndRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);         // Hidden file picker for media
@@ -452,13 +525,19 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     const encryptedMsg = encrypt(currentMessage, password);
     const msgId = Date.now().toString() + Math.random().toString(36).substring(2);
 
+    // Build replyTo reference (safe text only — never base64)
+    const replyToPayload = replyingTo
+      ? { messageId: replyingTo.msgId, sender: replyingTo.sender, text: replyingTo.text.slice(0, 120) }
+      : null;
+
     const messageData = {
       msgId,
       room,
       author: username,
       message: encryptedMsg,           // Encrypted ciphertext sent to server & DB
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      seenBy: []
+      seenBy: [],
+      replyTo: replyToPayload,
     };
 
     await socket.emit("send_message", messageData);
@@ -466,6 +545,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
     // Show plaintext locally for the sender
     setMessageList((list) => [...list, { ...messageData, message: currentMessage }]);
     setCurrentMessage("");
+    setReplyingTo(null);              // Clear reply state after sending
     socket.emit("stop_typing", { room });
   };
 
@@ -1081,6 +1161,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
             isDark={isDark}
             socket={socket}
             room={room}
+            onReply={setReplyingTo}
           />
         ))}
 
@@ -1105,7 +1186,72 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
       </div>
 
       {/* Input — sticky bottom-0 keeps it anchored above the mobile keyboard */}
-      <div className={`flex-shrink-0 sticky bottom-0 z-10 p-3 chat-input-area ${t.inputArea(isDark)}`}>
+      <div className={`flex-shrink-0 sticky bottom-0 z-10 chat-input-area ${t.inputArea(isDark)}`}>
+
+        {/* ── Glassmorphic Reply Preview Bar ────────────────────────────────── */}
+        <AnimatePresence>
+          {replyingTo && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scaleY: 0.92 }}
+              animate={{ opacity: 1, y: 0, scaleY: 1 }}
+              exit={{ opacity: 0, y: 8, scaleY: 0.92 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 14px',
+                borderTop: isDark ? '1px solid rgba(34,211,238,0.2)' : '1px solid rgba(59,130,246,0.2)',
+                borderBottom: isDark ? '1px solid rgba(34,211,238,0.08)' : '1px solid rgba(59,130,246,0.08)',
+                background: isDark
+                  ? 'rgba(10,20,40,0.72)'
+                  : 'rgba(239,246,255,0.82)',
+                backdropFilter: 'blur(18px)',
+                WebkitBackdropFilter: 'blur(18px)',
+                boxShadow: isDark
+                  ? '0 -2px 16px rgba(34,211,238,0.06)'
+                  : '0 -2px 16px rgba(59,130,246,0.07)',
+              }}
+            >
+              {/* Neon left accent bar */}
+              <div style={{ width: '3px', height: '34px', borderRadius: '2px', background: 'linear-gradient(180deg, #22d3ee, #3b82f6)', flexShrink: 0 }} />
+
+              {/* Reply info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '0.65rem', fontWeight: 700, color: '#22d3ee', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                  ↩ Replying to {replyingTo.sender}
+                </p>
+                <p style={{
+                  fontSize: '0.72rem',
+                  color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(30,41,59,0.55)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {replyingTo.text.slice(0, 80)}{replyingTo.text.length > 80 ? '…' : ''}
+                </p>
+              </div>
+
+              {/* Close button */}
+              <button
+                onClick={() => setReplyingTo(null)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(30,41,59,0.4)',
+                  padding: '4px', borderRadius: '50%', display: 'flex', alignItems: 'center',
+                  transition: 'color 0.15s',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = '#22d3ee'}
+                onMouseLeave={e => e.currentTarget.style.color = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(30,41,59,0.4)'}
+                title="Cancel reply"
+              >
+                <X size={15} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Input row */}
+        <div className="p-3">
         {/* Hidden file input — accepts images and videos */}
         <input
           ref={fileInputRef}
@@ -1165,6 +1311,7 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
           >
             <Send className="w-5 h-5" />
           </button>
+        </div>
         </div>
       </div>
     </div>

@@ -19,7 +19,16 @@ const messageSchema = new mongoose.Schema({
   message: { type: String, required: true }, // Encrypted ciphertext OR placeholder text
   time: { type: String, required: true },
   type: { type: String, default: 'text' },   // 'text' | 'image' | 'video'
-  seenBy: { type: [String], default: [] }
+  seenBy: { type: [String], default: [] },
+  // Reply reference — never stores media content, only text/type references
+  replyTo: {
+    type: {
+      messageId: String,
+      sender: String,
+      text: String       // e.g. '[Image]', '[Video]', or truncated quoted text
+    },
+    default: null
+  }
 }, { timestamps: true });
 
 const Message = mongoose.model('Message', messageSchema);
@@ -111,7 +120,8 @@ io.on("connection", (socket) => {
         author: data.author,
         message: data.message,
         time: data.time,
-        seenBy: []
+        seenBy: [],
+        replyTo: data.replyTo || null   // { messageId, sender, text } or null
       });
       await newMessage.save();
     } catch (err) {
