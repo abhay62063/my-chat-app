@@ -1303,15 +1303,17 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 10002,
-              width: '95%',
-              maxWidth: '380px',
+              // ── FIX: 92% width on mobile so it never overflows the viewport
+              width: '92%',
+              maxWidth: '450px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '10px',
-              padding: '13px 16px',
+              padding: '10px 14px',
               borderRadius: '12px',
-              fontSize: '0.82rem',
+              // ── FIX: clamp scales from 11px on tiny screens to 13px on desktop
+              fontSize: 'clamp(0.69rem, 2.8vw, 0.82rem)',
               fontWeight: 600,
               background: 'rgba(234, 179, 8, 0.12)',
               border: '1px solid rgba(234, 179, 8, 0.4)',
@@ -1321,9 +1323,11 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               WebkitBackdropFilter: 'blur(14px)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-              <WifiOff size={15} style={{ flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {/* Icon + wrapping text */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1, minWidth: 0 }}>
+              <WifiOff size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
+              {/* ── FIX: white-space:normal so text wraps on narrow screens */}
+              <span style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>
                 Message could not be decrypted. Try refreshing or use Repair Connection.
               </span>
             </div>
@@ -1354,15 +1358,15 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 10001,
-              width: '95%',
-              maxWidth: '360px',
+              width: '92%',
+              maxWidth: '400px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '10px',
-              padding: '13px 16px',
+              padding: '10px 14px',
               borderRadius: '12px',
-              fontSize: '0.82rem',
+              fontSize: 'clamp(0.69rem, 2.8vw, 0.82rem)',
               fontWeight: 600,
               background: 'rgba(239, 68, 68, 0.12)',
               border: '1px solid rgba(239, 68, 68, 0.35)',
@@ -1372,9 +1376,9 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
               WebkitBackdropFilter: 'blur(14px)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-              <span>⚠️</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+              <span style={{ flexShrink: 0 }}>⚠️</span>
+              <span style={{ whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>
                 File too large! Max limit is 100MB.
               </span>
             </div>
@@ -1567,68 +1571,87 @@ export function ChatArea({ socket, username, room, password, setUsername, setRoo
           )}
         </AnimatePresence>
 
-        {/* Input row */}
-        <div className="p-3">
-        {/* Hidden file input — accepts images and videos */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            // File selected — reset the picker guard first
-            if (isPickingFile) isPickingFile.current = false;
-            sendMultimedia(e.target.files[0]);
-          }}
-        />
-
-        <div className={`flex items-center gap-2 rounded-full p-1.5 border transition-all shadow-inner ${isDark ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50' : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'}`}>
-          {/* Attachment button — pulsing 'Sending…' label when active */}
-          <button
-            onClick={() => {
-              if (isPickingFile) isPickingFile.current = true;
-              fileInputRef.current?.click();
-            }}
-            disabled={isSending}
-            title={isSending ? 'Sending…' : 'Share image or video'}
-            className={`p-2 rounded-full transition-all flex-shrink-0 disabled:opacity-60 flex items-center gap-1.5 ${
-              isDark
-                ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/10'
-                : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100'
-            }`}
-          >
-            {isSending ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-                <span
-                  className="text-[10px] font-semibold tracking-wide"
-                  style={{ color: '#22d3ee', animation: 'pulse 1.2s ease-in-out infinite' }}
-                >
-                  Sending…
-                </span>
-              </>
-            ) : (
-              <Paperclip className="w-4 h-4" />
-            )}
-          </button>
-
+        {/* Input row — full-width flex, symmetrical padding, no artificial oval */}
+        <div className="px-3 pb-3 pt-2">
+          {/* Hidden file input */}
           <input
-            type="text"
-            value={currentMessage}
-            onChange={handleTyping}
-            onKeyPress={(e) => !isSending && e.key === "Enter" && sendMessage()}
-            disabled={isSending}
-            className={`flex-1 bg-transparent px-2 outline-none text-sm ${isDark ? 'text-white placeholder:text-gray-500' : 'text-slate-800 placeholder:text-slate-400'} disabled:opacity-50`}
-            placeholder={isSending ? "Sending media..." : "Type your message..."}
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              if (isPickingFile) isPickingFile.current = false;
+              sendMultimedia(e.target.files[0]);
+            }}
           />
-          <button
-            onClick={sendMessage}
-            disabled={!currentMessage.trim() || isSending}
-            className={`p-2.5 rounded-full text-white shadow-lg transition-all disabled:opacity-50 ${t.sendBtn(isDark)}`}
+
+          {/*
+            Capsule wrapper:
+            - display:flex + align-items:center keeps icon, text, button on the same baseline
+            - min-height:48px ensures a comfortable 44px+ touch target on mobile
+            - p-1.5 on left/right is now uniform to avoid the oval artifact
+          */}
+          <div
+            className={`flex items-center gap-1.5 rounded-full border transition-all ${
+              isDark
+                ? 'bg-white/10 border-white/10 focus-within:border-cyan-500/50'
+                : 'bg-slate-50 border-slate-200 focus-within:border-blue-400'
+            }`}
+            style={{ minHeight: '48px', padding: '4px 4px 4px 6px' }}
           >
-            <Send className="w-5 h-5" />
-          </button>
-        </div>
+            {/* Attachment / Sending spinner button */}
+            <button
+              onClick={() => {
+                if (isPickingFile) isPickingFile.current = true;
+                fileInputRef.current?.click();
+              }}
+              disabled={isSending}
+              title={isSending ? 'Sending…' : 'Share image or video'}
+              className={`flex-shrink-0 flex items-center justify-center gap-1.5 w-9 h-9 rounded-full transition-all disabled:opacity-60 ${
+                isDark
+                  ? 'text-gray-400 hover:text-cyan-400 hover:bg-white/10'
+                  : 'text-slate-400 hover:text-blue-500 hover:bg-slate-100'
+              }`}
+            >
+              {isSending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                  <span
+                    className="text-[10px] font-semibold tracking-wide hidden sm:inline"
+                    style={{ color: '#22d3ee', animation: 'pulse 1.2s ease-in-out infinite' }}
+                  >
+                    Sending…
+                  </span>
+                </>
+              ) : (
+                <Paperclip className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Text input — flex:1 expands to fill all remaining space */}
+            <input
+              type="text"
+              value={currentMessage}
+              onChange={handleTyping}
+              onKeyPress={(e) => !isSending && e.key === "Enter" && sendMessage()}
+              disabled={isSending}
+              className={`flex-1 min-w-0 bg-transparent px-1 outline-none text-sm ${
+                isDark ? 'text-white placeholder:text-gray-500' : 'text-slate-800 placeholder:text-slate-400'
+              } disabled:opacity-50`}
+              placeholder={isSending ? "Sending media..." : "Type your message..."}
+            />
+
+            {/* Send button — fixed 40×40px circle, flush right inside capsule */}
+            <button
+              onClick={sendMessage}
+              disabled={!currentMessage.trim() || isSending}
+              className={`flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full text-white shadow-lg transition-all disabled:opacity-40 ${
+                t.sendBtn(isDark)
+              }`}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
